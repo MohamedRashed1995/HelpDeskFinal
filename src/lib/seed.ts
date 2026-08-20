@@ -1,6 +1,7 @@
 import type { Ticket, User } from "./types";
+import { DEFAULT_SCOPE } from "./roleConfig";
 
-type SeedTicket = Omit<Ticket, "priority" | "resolvedAt" | "closedAt"> &
+type SeedTicket = Omit<Ticket, "priority" | "resolvedAt" | "closedAt" | "organizationId" | "projectId"> &
   Partial<Pick<Ticket, "priority" | "resolvedAt" | "closedAt">>;
 
 export const USERS: User[] = [
@@ -169,6 +170,8 @@ export const SEED_TICKETS: Ticket[] = RAW_SEED_TICKETS.map((ticket) => ({
   priority: "Normal",
   resolvedAt: ticket.status === "Resolved" || ticket.status === "Closed" ? ticket.updatedAt : null,
   closedAt: ticket.status === "Closed" ? ticket.updatedAt : null,
+  organizationId: DEFAULT_SCOPE.organizationId,
+  projectId: DEFAULT_SCOPE.projectId,
   ...ticket,
 }));
 

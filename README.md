@@ -90,6 +90,20 @@ Unauthorized navigation renders a real 403 page instead of a silent redirect, an
 
 Only managers can change ticket status. Submitters can create and view their own tickets; reviewers can view all tickets and add comments without changing status.
 
+## RBAC model
+
+Permissions are centralized in `src/lib/roleConfig.ts` and enforced by `src/lib/permissions.ts`, the ticket repository, and `firestore.rules`.
+
+| Role | Permissions |
+| --- | --- |
+| `submitter` | Create tickets; view own tickets |
+| `reviewer` | View tickets in scope; change status; add comments |
+| `manager` | View/create/edit in scope; change status and priority; assign reviewers; view metrics and audit records; export permission is reserved for the future UI |
+
+Every user profile and ticket carries `organizationId` and `projectId`. The current default scope is `helpdesk` / `helpdesk-core`; Firestore queries and rules require the caller and ticket scopes to match. Assignment targets must be active reviewers.
+
+Audit records are append-only, include organization/project scope, and are written in the same Firestore batch as ticket mutations. Closed tickets cannot be reopened or deleted.
+
 ## Ticket rules
 
 - Lifecycle: Open → In Triage → In Progress → Resolved → Closed (no skipping).

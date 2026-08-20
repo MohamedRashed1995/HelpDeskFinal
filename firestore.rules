@@ -31,13 +31,18 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    function inProfileScope(data) {
+      return data.organizationId == profile().organizationId
+        && data.projectId == profile().projectId;
+    }
+
     // ---------------------------------------------------------------- users
     match /users/{uid} {
       function unchanged(field) {
         return !(field in request.resource.data) || request.resource.data[field] == resource.data[field];
       }
 
-      allow read: if isOwner(uid) || isStaff();
+      allow read: if isOwner(uid) || (isStaff() && inProfileScope(resource.data));
 
       // A profile is created for the caller's own uid; privileged emails receive their configured role.
       allow create: if isOwner(uid)
@@ -49,12 +54,17 @@ service cloud.firestore {
           request.auth.token.email == 'reviewer@helpdesk.com' ? 'reviewer' : 'submitter'
         )
         && request.resource.data.email is string
-        && request.resource.data.displayName is string;
+        && request.resource.data.displayName is string
+        && request.resource.data.organizationId == 'helpdesk'
+        && request.resource.data.projectId == 'helpdesk-core';
 
       // Users may maintain their own profile but never their own role.
       // Only managers promote users to submitter, reviewer, or manager.
       allow update: if (isOwner(uid)
           && unchanged('uid')
+          && unchanged('organizationId')
+          && unchanged('projectId')
+          && unchanged('active')
           && (unchanged('role')
             || ((request.auth.token.email == 'manager@helpdesk.com'
               || request.auth.token.email == 'Mohamed.webb@contoso.internal'
@@ -62,8 +72,10 @@ service cloud.firestore {
               && request.resource.data.role == 'manager')
             || (request.auth.token.email == 'reviewer@helpdesk.com' && request.resource.data.role == 'reviewer')))
         || (isManager()
-            && request.resource.data.uid == resource.data.uid
-          && request.resource.data.role in ['submitter', 'reviewer', 'manager']);
+          && inProfileScope(resource.data)
+          && inProfileScope(request.resource.data)
+          && request.resource.data.uid == resource.data.uid
+          && unchanged('role'));
 
       allow delete: if false;
     }
@@ -88,6 +100,23 @@ service cloud.firestore {
 
       function assigneeChanged() {
         return incoming().assigneeId != existing().assigneeId;
+      }
+
+      function priorityChanged() {
+        return incoming().priority != existing().priority;
+      }
+
+      function inTicketScope(data) {
+        return data.organizationId == profile().organizationId
+          && data.projectId == profile().projectId;
+      }
+
+      function assignmentTargetAllowed() {
+        return incoming().assigneeId == null
+          || (exists(/databases/$(database)/documents/users/$(incoming().assigneeId))
+            && get(/databases/$(database)/documents/users/$(incoming().assigneeId)).data.role == 'reviewer'
+            && get(/databases/$(database)/documents/users/$(incoming().assigneeId)).data.active == true
+            && inProfileScope(get(/databases/$(database)/documents/users/$(incoming().assigneeId)).data));
       }
 
       function immutableFieldsKept() {
@@ -125,10 +154,18 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activity', 'updatedAt']);
       }
 
-      allow read: if isStaff() || isSubmitterOfTicket();
+      function reviewerStatusUpdateAllowed() {
+        return role() == 'reviewer'
+          && statusChanged()
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'updatedAt', 'resolvedAt', 'closedAt', 'activity']);
+      }
+
+      allow read: if inTicketScope(existing()) && (isStaff() || isSubmitterOfTicket());
 
       allow create: if isSignedIn()
         && incoming().submitterId == request.auth.uid
+        && inTicketScope(incoming())
         && incoming().status == 'Open'
         && incoming().assigneeId == null
         && incoming().id == ticketId
@@ -137,9 +174,13 @@ service cloud.firestore {
 
       allow update: if isSignedIn()
         && isStaff()
+        && inTicketScope(existing())
+        && inTicketScope(incoming())
         && existing().status != 'Closed'
         && immutableFieldsKept()
-        && (role() == 'manager' || (role() == 'reviewer' && (statusChanged() || reviewerUpdateAllowed())))
+        && (role() == 'manager' || reviewerStatusUpdateAllowed() || reviewerUpdateAllowed())
+        && (!priorityChanged() || role() == 'manager')
+        && (!assigneeChanged() || (role() == 'manager' && assignmentTargetAllowed()))
         && (!statusChanged() || (lifecycleOrdered() && assigneeRequirementMet() && statusAllowedForRole()))
         && (!assigneeChanged() || assignmentAllowedForRole());
 
@@ -150,13 +191,19 @@ service cloud.firestore {
     // Append-only: created by the acting user, never updated or deleted by clients.
     match /auditLogs/{logId} {
       allow read: if isStaff()
-        || (isSignedIn() && resource.data.actorId == request.auth.uid);
+        && inProfileScope(resource.data)
+        || (isSignedIn()
+          && resource.data.actorId == request.auth.uid
+          && inProfileScope(resource.data));
 
       allow create: if isSignedIn()
         && request.resource.data.actorId == request.auth.uid
         && request.resource.data.ticketId is string
         && request.resource.data.action is string
-        && request.resource.data.createdAt is string;
+        && request.resource.data.createdAt is string
+        && request.resource.data.organizationId == profile().organizationId
+        && request.resource.data.projectId == profile().projectId
+        && inProfileScope(getAfter(/databases/$(database)/documents/tickets/$(request.resource.data.ticketId)).data);
 
       allow update, delete: if false;
     }

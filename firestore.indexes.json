@@ -4,7 +4,18 @@
       "collectionGroup": "tickets",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "projectId", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "tickets",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "submitterId", "order": "ASCENDING" },
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "projectId", "order": "ASCENDING" },
         { "fieldPath": "updatedAt", "order": "DESCENDING" }
       ]
     },

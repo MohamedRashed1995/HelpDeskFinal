@@ -8,11 +8,12 @@ import {
   type ReactNode,
 } from "react";
 import { useAuth } from "./auth";
-import { checkAssignment, checkClose, checkNote, checkStatusChange, isStaff } from "./permissions";
+import { canManageTicket, checkAssignment, checkClose, checkNote, checkStatusChange, isStaff } from "./permissions";
 import { SEED_TICKETS, USERS } from "./seed";
 import * as repository from "./ticketsRepository";
 import type { Ticket, TicketStatus, User } from "./types";
 import { NEXT_STATUS } from "./types";
+import { DEFAULT_SCOPE } from "./roleConfig";
 
 const STORAGE_KEY = "helpdesk-lite-state-v1";
 const FIREBASE_FALLBACK_TICKETS_KEY = "helpdesk-lite-fallback-tickets-v1";
@@ -38,6 +39,7 @@ type AppContextValue = {
   assignTicket: (ticketId: string, assigneeId: string) => Promise<string | null>;
   advanceStatus: (ticketId: string) => Promise<string | null>;
   closeTicket: (ticketId: string) => Promise<string | null>;
+  changePriority: (ticketId: string, priority: Ticket["priority"]) => Promise<string | null>;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -111,6 +113,8 @@ function createLocalTicket(user: User, input: { subject: string; category: strin
     resolvedAt: null,
     closedAt: null,
     activity: [{ id: crypto.randomUUID(), at: createdAt, userId: user.id, kind: "status", message: "Ticket opened", to: "Open" }],
+    organizationId: user.organizationId ?? DEFAULT_SCOPE.organizationId,
+    projectId: user.projectId ?? DEFAULT_SCOPE.projectId,
   };
 }
 
@@ -234,6 +238,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             to: "Open",
           },
         ],
+        organizationId: user.organizationId ?? DEFAULT_SCOPE.organizationId,
+        projectId: user.projectId ?? DEFAULT_SCOPE.projectId,
       };
       setTickets((list) => [created, ...list]);
       showToast("Ticket created successfully");
@@ -271,7 +277,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async (ticketId, assigneeId) => {
       const ticket = tickets.find((item) => item.id === ticketId);
       if (!user || !ticket) return "Ticket not found.";
-      const blocked = checkAssignment(user, ticket, assigneeId);
+      const assignee = users.find((item) => item.id === assigneeId);
+      const blocked = checkAssignment(user, ticket, assigneeId, assignee);
       if (blocked) return blocked;
 
       const assigneeName = users.find((item) => item.id === assigneeId)?.name ?? assigneeId;
@@ -362,6 +369,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [applyStatus, showToast, tickets, user],
   );
 
+  const changePriority = useCallback<AppContextValue["changePriority"]>(
+    async (ticketId, priority) => {
+      const ticket = tickets.find((item) => item.id === ticketId);
+      if (!user || !ticket) return "Ticket not found.";
+      if (!canManageTicket(user, ticket, "ticket:priority")) return "Your role cannot change priority.";
+      if (mode === "firebase") {
+        await repository.changePriority(user, ticket, priority);
+      } else {
+        patchLocal(ticketId, (current) => ({ ...current, priority, updatedAt: nowIso() }));
+      }
+      showToast("Ticket priority updated");
+      return null;
+    },
+    [mode, patchLocal, showToast, tickets, user],
+  );
+
   const value = useMemo<AppContextValue>(
     () => ({
       user,
@@ -377,12 +400,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       assignTicket,
       advanceStatus,
       closeTicket,
+      changePriority,
     }),
     [
       addNote,
       advanceStatus,
       assignTicket,
       closeTicket,
+      changePriority,
       createTicket,
       logout,
       setTheme,

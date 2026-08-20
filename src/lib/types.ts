@@ -1,5 +1,29 @@
 export type Role = "submitter" | "reviewer" | "manager";
 
+export const ROLES = ["submitter", "reviewer", "manager"] as const;
+export type Permission =
+  | "ticket:view:own"
+  | "ticket:view:scope"
+  | "ticket:create"
+  | "ticket:edit"
+  | "ticket:status"
+  | "ticket:priority"
+  | "ticket:assign"
+  | "ticket:bulk"
+  | "metrics:view"
+  | "audit:view"
+  | "ticket:export"
+  | "user:role:manage"
+  | "user:delete"
+  | "auth:config:manage"
+  | "rules:manage"
+  | "audit:delete"
+  | "ticket:delete"
+  | "ticket:reopen";
+
+export const DEFAULT_ORGANIZATION_ID = "helpdesk";
+export const DEFAULT_PROJECT_ID = "helpdesk-core";
+
 export type TicketStatus =
   | "Open"
   | "In Triage"
@@ -16,6 +40,7 @@ export type AuditAction =
   | "ticket.priority"
   | "ticket.resolved"
   | "ticket.closed"
+  | "ticket.bulk"
   | "ticket.note";
 
 export type TicketPriority = "Low" | "Normal" | "High" | "Urgent";
@@ -29,6 +54,9 @@ export type User = {
   emailVerified?: boolean;
   authProvider?: "firebase" | "demo";
   avatarUrl?: string | null;
+  organizationId?: string;
+  projectId?: string;
+  active?: boolean;
 };
 
 /** Shape of a `users/{uid}` document in Firestore. */
@@ -41,6 +69,9 @@ export type UserProfileDoc = {
   avatarUrl: string | null;
   createdAt: string;
   updatedAt: string;
+  organizationId: string;
+  projectId: string;
+  active: boolean;
 };
 
 /** Shape of an `auditLogs/{logId}` document in Firestore. */
@@ -52,6 +83,8 @@ export type AuditLog = {
   oldValue: string | null;
   newValue: string | null;
   createdAt: string;
+  organizationId: string;
+  projectId: string;
 };
 
 export type Activity = {
@@ -80,6 +113,8 @@ export type Ticket = {
   resolvedAt: string | null;
   closedAt: string | null;
   activity: Activity[];
+  organizationId: string;
+  projectId: string;
 };
 
 export const CATEGORIES = [

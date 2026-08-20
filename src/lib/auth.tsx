@@ -25,7 +25,7 @@ import {
 import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import { getFirebase, isFirebaseConfigured } from "./firebase";
 import { DEFAULT_ROLE, ROLE_TITLES } from "./permissions";
-import { roleForEmail } from "./roleConfig";
+import { DEFAULT_SCOPE, roleForEmail, roleForProfile } from "./roleConfig";
 import { USERS, userById } from "./seed";
 import type { User, UserProfileDoc } from "./types";
 
@@ -54,7 +54,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 function profileToUser(profile: UserProfileDoc, authenticatedEmail: string | null): User {
   const email = authenticatedEmail ?? profile.email;
-  const role = roleForEmail(email);
+  const role = roleForProfile(email, profile.role);
   return {
     id: profile.uid,
     name: profile.displayName || profile.email,
@@ -64,6 +64,9 @@ function profileToUser(profile: UserProfileDoc, authenticatedEmail: string | nul
     emailVerified: profile.emailVerified,
     authProvider: "firebase",
     avatarUrl: profile.avatarUrl ?? null,
+    active: profile.active,
+    organizationId: profile.organizationId,
+    projectId: profile.projectId,
   };
 }
 
@@ -88,11 +91,14 @@ function readProfileDoc(uid: string, data: Record<string, unknown> | undefined):
     uid,
     email,
     displayName: typeof data.displayName === "string" ? data.displayName : "",
-    role: roleForEmail(email),
+    role: roleForProfile(email, data.role),
     emailVerified: data.emailVerified === true,
     avatarUrl: typeof data.avatarUrl === "string" ? data.avatarUrl : null,
     createdAt: typeof data.createdAt === "string" ? data.createdAt : "",
     updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : "",
+    organizationId: typeof data.organizationId === "string" ? data.organizationId : DEFAULT_SCOPE.organizationId,
+    projectId: typeof data.projectId === "string" ? data.projectId : DEFAULT_SCOPE.projectId,
+    active: data.active !== false,
   };
 }
 
@@ -116,6 +122,9 @@ async function ensureProfile(firebaseUser: FirebaseUser, assignedRole = roleForE
       avatarUrl: firebaseUser.photoURL,
       createdAt: now,
       updatedAt: now,
+      organizationId: DEFAULT_SCOPE.organizationId,
+      projectId: DEFAULT_SCOPE.projectId,
+      active: true,
     };
     await setDoc(ref, { ...profile, createdAtServer: serverTimestamp() });
     return;
@@ -210,6 +219,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         avatarUrl: credential.user.photoURL,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+        organizationId: DEFAULT_SCOPE.organizationId,
+        projectId: DEFAULT_SCOPE.projectId,
+        active: true,
       });
       await sendEmailVerification(credential.user);
     },

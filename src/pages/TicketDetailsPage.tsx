@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { StatusBadge } from "../components/StatusBadge";
 import { canAssign, canChangeStatus } from "../lib/permissions";
 import { useApp } from "../lib/store";
-import { LIFECYCLE, NEXT_STATUS } from "../lib/types";
+import { LIFECYCLE, NEXT_STATUS, PRIORITIES, type TicketPriority } from "../lib/types";
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en", {
@@ -14,7 +14,7 @@ function formatDate(value: string) {
 
 export function TicketDetailsPage() {
   const { id } = useParams();
-  const { user, tickets, users, addNote, assignTicket, advanceStatus, closeTicket } = useApp();
+  const { user, tickets, users, addNote, assignTicket, advanceStatus, closeTicket, changePriority } = useApp();
   const [note, setNote] = useState("");
   const [assignee, setAssignee] = useState("");
   const [block, setBlock] = useState("");
@@ -149,6 +149,21 @@ export function TicketDetailsPage() {
             </form>
           ) : null}
         </div>
+
+        {!readonly && user.role === "manager" ? (
+          <div className="rounded-[12px] p-5" style={{ background: "var(--surface)" }}>
+            <label className="block text-sm">
+              Priority
+              <select
+                className="field mt-2"
+                value={ticket.priority}
+                onChange={async (event) => setBlock((await changePriority(ticketId, event.target.value as TicketPriority)) ?? "")}
+              >
+                {PRIORITIES.map((priority) => <option key={priority} value={priority}>{priority}</option>)}
+              </select>
+            </label>
+          </div>
+        ) : null}
 
         {!readonly && canChangeStatus(user.role) ? (
           <div className="rounded-[12px] p-5" style={{ background: "var(--surface)" }}>

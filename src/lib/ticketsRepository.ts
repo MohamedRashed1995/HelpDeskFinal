@@ -10,9 +10,10 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { getFirebase } from "./firebase";
-import { ROLE_TITLES, isRole, isStaff } from "./permissions";
+import { assertCanManageTicket, checkStatusChange, hasPermission, ROLE_TITLES, isRole, isStaff } from "./permissions";
 import { SEED_TICKETS } from "./seed";
-import type { Activity, AuditAction, Role, Ticket, TicketStatus, User } from "./types";
+import { DEFAULT_SCOPE } from "./roleConfig";
+import type { Activity, AuditAction, Role, Ticket, TicketPriority, TicketStatus, User } from "./types";
 
 function nowIso() {
   return new Date().toISOString();
@@ -44,6 +45,8 @@ function toTicket(id: string, data: Record<string, unknown>): Ticket {
     resolvedAt: (data.resolvedAt as string | null) ?? null,
     closedAt: (data.closedAt as string | null) ?? null,
     activity: Array.isArray(data.activity) ? ([...data.activity] as Activity[]) : [],
+    organizationId: String(data.organizationId ?? DEFAULT_SCOPE.organizationId),
+    projectId: String(data.projectId ?? DEFAULT_SCOPE.projectId),
   };
 }
 
@@ -59,9 +62,21 @@ export function subscribeToTickets(
 ): Unsubscribe {
   const { db } = getFirebase();
   const tickets = collection(db, "tickets");
+  const organizationId = user.organizationId ?? DEFAULT_SCOPE.organizationId;
+  const projectId = user.projectId ?? DEFAULT_SCOPE.projectId;
   const scoped = isStaff(user.role)
-    ? query(tickets, orderBy("updatedAt", "desc"))
-    : query(tickets, where("submitterId", "==", user.id));
+    ? query(
+        tickets,
+        where("organizationId", "==", organizationId),
+        where("projectId", "==", projectId),
+        orderBy("updatedAt", "desc"),
+      )
+    : query(
+        tickets,
+        where("organizationId", "==", organizationId),
+        where("projectId", "==", projectId),
+        where("submitterId", "==", user.id),
+      );
 
   return onSnapshot(
     scoped,
@@ -96,6 +111,9 @@ export function subscribeToUsers(
             emailVerified: data.emailVerified === true,
             authProvider: "firebase" as const,
             avatarUrl: (data.avatarUrl as string | null) ?? null,
+            organizationId: String(data.organizationId ?? DEFAULT_SCOPE.organizationId),
+            projectId: String(data.projectId ?? DEFAULT_SCOPE.projectId),
+            active: data.active !== false,
           };
         }),
       );
@@ -110,12 +128,23 @@ type AuditInput = {
   action: AuditAction;
   oldValue: string | null;
   newValue: string | null;
+  organizationId?: string;
+  projectId?: string;
 };
 
 function auditRef(input: AuditInput) {
   const { db } = getFirebase();
   const ref = doc(collection(db, "auditLogs"));
-  return { ref, payload: { id: ref.id, createdAt: nowIso(), ...input } };
+  return {
+    ref,
+    payload: {
+      id: ref.id,
+      createdAt: nowIso(),
+      organizationId: input.organizationId ?? DEFAULT_SCOPE.organizationId,
+      projectId: input.projectId ?? DEFAULT_SCOPE.projectId,
+      ...input,
+    },
+  };
 }
 
 async function commit(
@@ -137,6 +166,7 @@ export async function createTicket(
   user: User,
   input: { subject: string; category: string; description: string; priority?: Ticket["priority"] },
 ): Promise<Ticket> {
+  if (!hasPermission(user.role, "ticket:create")) throw new Error("Forbidden: you cannot create tickets.");
   const { db } = getFirebase();
   const id = newTicketId();
   const createdAt = nowIso();
@@ -156,6 +186,8 @@ export async function createTicket(
     resolvedAt: null,
     closedAt: null,
     activity: [activity(user, "status", "Ticket opened", undefined, "Open")],
+    organizationId: user.organizationId ?? DEFAULT_SCOPE.organizationId,
+    projectId: user.projectId ?? DEFAULT_SCOPE.projectId,
   };
 
   const batch = writeBatch(db);
@@ -166,6 +198,8 @@ export async function createTicket(
     action: "ticket.created",
     oldValue: null,
     newValue: "Open",
+    organizationId: ticket.organizationId,
+    projectId: ticket.projectId,
   });
   batch.set(ref, payload);
   try {
@@ -183,6 +217,7 @@ export async function createTicket(
 }
 
 export async function addNote(user: User, ticket: Ticket, message: string) {
+  assertCanManageTicket(user, ticket, "ticket:edit");
   await commit(
     ticket.id,
     { updatedAt: nowIso(), activity: arrayUnion(activity(user, "note", message)) },
@@ -193,12 +228,15 @@ export async function addNote(user: User, ticket: Ticket, message: string) {
         action: "ticket.note",
         oldValue: null,
         newValue: message.slice(0, 500),
+        organizationId: ticket.organizationId,
+        projectId: ticket.projectId,
       },
     ],
   );
 }
 
 export async function assignTicket(user: User, ticket: Ticket, assigneeId: string, assigneeName: string) {
+  assertCanManageTicket(user, ticket, "ticket:assign");
   const at = nowIso();
   await commit(
     ticket.id,
@@ -218,12 +256,15 @@ export async function assignTicket(user: User, ticket: Ticket, assigneeId: strin
         action: "ticket.assigned",
         oldValue: ticket.assigneeId,
         newValue: assigneeId,
+        organizationId: ticket.organizationId,
+        projectId: ticket.projectId,
       },
     ],
   );
 }
 
 export async function changeStatus(user: User, ticket: Ticket, next: TicketStatus) {
+  assertCanManageTicket(user, ticket, "ticket:status");
   const at = nowIso();
   const update: Record<string, unknown> = {
     status: next,
@@ -243,6 +284,57 @@ export async function changeStatus(user: User, ticket: Ticket, next: TicketStatu
       action,
       oldValue: ticket.status,
       newValue: next,
+      organizationId: ticket.organizationId,
+      projectId: ticket.projectId,
     },
   ]);
+}
+
+export async function changePriority(user: User, ticket: Ticket, priority: TicketPriority) {
+  assertCanManageTicket(user, ticket, "ticket:priority");
+  if (ticket.status === "Closed") throw new Error("Closed tickets are read-only.");
+  await commit(
+    ticket.id,
+    { priority, updatedAt: nowIso(), activity: arrayUnion(activity(user, "status", `Priority updated to ${priority}`)) },
+    [{
+      ticketId: ticket.id,
+      actorId: user.id,
+      action: "ticket.priority",
+      oldValue: ticket.priority,
+      newValue: priority,
+      organizationId: ticket.organizationId,
+      projectId: ticket.projectId,
+    }],
+  );
+}
+
+export async function bulkChangeStatus(user: User, tickets: Ticket[], next: TicketStatus) {
+  if (!hasPermission(user.role, "ticket:bulk")) throw new Error("Forbidden: bulk actions require manager permission.");
+  const { db } = getFirebase();
+  const batch = writeBatch(db);
+  const at = nowIso();
+  for (const ticket of tickets) {
+    assertCanManageTicket(user, ticket, "ticket:status");
+    const blocked = checkStatusChange(user, ticket, next);
+    if (blocked) throw new Error(blocked);
+    const update: Record<string, unknown> = {
+      status: next,
+      updatedAt: at,
+      activity: arrayUnion(activity(user, "status", `Bulk status updated to ${next}`, ticket.status, next)),
+    };
+    if (next === "Resolved") update.resolvedAt = at;
+    if (next === "Closed") update.closedAt = at;
+    batch.update(doc(db, "tickets", ticket.id), update);
+    const { ref, payload } = auditRef({
+      ticketId: ticket.id,
+      actorId: user.id,
+      action: "ticket.bulk",
+      oldValue: ticket.status,
+      newValue: next,
+      organizationId: ticket.organizationId,
+      projectId: ticket.projectId,
+    });
+    batch.set(ref, payload);
+  }
+  await batch.commit();
 }

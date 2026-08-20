@@ -3,11 +3,13 @@ import {
   DEFAULT_ROLE,
   canAccessRoute,
   canViewTicket,
+  canManageTicket,
   checkAssignment,
   checkClose,
   checkNote,
   checkStatusChange,
   isStaff,
+  hasPermission,
 } from "./permissions";
 import type { Role, Ticket, TicketStatus, User } from "./types";
 
@@ -42,6 +44,8 @@ function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
     resolvedAt: null,
     closedAt: null,
     activity: [],
+    organizationId: "helpdesk",
+    projectId: "helpdesk-core",
     ...overrides,
   };
 }
@@ -49,6 +53,14 @@ function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
 describe("roles", () => {
   it("defaults new accounts to submitter", () => {
     expect(DEFAULT_ROLE).toBe("submitter");
+  });
+
+  it("maps centralized permissions by role", () => {
+    expect(hasPermission("manager", "ticket:priority")).toBe(true);
+    expect(hasPermission("manager", "ticket:assign")).toBe(true);
+    expect(hasPermission("reviewer", "ticket:view:scope")).toBe(true);
+    expect(hasPermission("reviewer", "ticket:priority")).toBe(false);
+    expect(hasPermission("submitter", "ticket:view:scope")).toBe(false);
   });
 
   it("treats reviewer and manager as staff", () => {
@@ -97,9 +109,26 @@ describe("ticket ownership", () => {
     expect(canViewTicket(makeUser("reviewer"), ticket)).toBe(true);
   });
 
+  it("denies a manager outside the organization/project scope", () => {
+    const scopedTicket = makeTicket({ organizationId: "other-org", projectId: "other-project" });
+    const manager = makeUser("manager");
+    manager.organizationId = "helpdesk";
+    manager.projectId = "helpdesk-core";
+    expect(canViewTicket(manager, scopedTicket)).toBe(false);
+    expect(canManageTicket(manager, scopedTicket, "ticket:status")).toBe(false);
+  });
+
   it("blocks notes from a submitter who does not own the ticket", () => {
     expect(checkNote(makeUser("submitter", "u-other"), ticket)).toBeTruthy();
-    expect(checkNote(makeUser("submitter", "u-submitter"), ticket)).toBeNull();
+    expect(checkNote(makeUser("submitter", "u-submitter"), ticket)).toBeTruthy();
+  });
+
+  it("allows scoped managers and denies out-of-scope managers", () => {
+    const manager = makeUser("manager");
+    manager.organizationId = "helpdesk";
+    manager.projectId = "helpdesk-core";
+    expect(canManageTicket(manager, ticket, "ticket:status")).toBe(true);
+    expect(canManageTicket(manager, { ...ticket, projectId: "other-project" }, "ticket:status")).toBe(false);
   });
 });
 
@@ -154,7 +183,6 @@ describe("status transitions", () => {
     expect(checkClose(makeUser("reviewer"), resolved)).toBeNull();
     expect(checkClose(makeUser("submitter", "u-submitter"), resolved)).toBeTruthy();
     expect(checkClose(makeUser("submitter", "u-other"), resolved)).toBeTruthy();
-    expect(checkClose(makeUser("reviewer"), resolved)).toBeTruthy();
     expect(checkClose(makeUser("manager"), makeTicket({ status: "Open" }))).toBeTruthy();
   });
 });
