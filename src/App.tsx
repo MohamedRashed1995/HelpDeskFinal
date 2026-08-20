@@ -37,7 +37,7 @@ export default function App() {
                 <Route path="/tickets" element={<MyTicketsPage />} />
                 <Route path="/tickets/new" element={<CreateTicketPage />} />
                 <Route path="/tickets/:id" element={<TicketDetailsPage />} />
-                <Route element={<RoleGate allow={["agent", "triage", "manager"]} />}>
+                <Route element={<RoleGate allow={["reviewer", "manager"]} />}>
                   <Route path="/queue" element={<QueuePage />} />
                   <Route path="/agent/queue" element={<Navigate to="/queue" replace />} />
                 </Route>

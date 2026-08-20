@@ -41,7 +41,7 @@ function renderAt(path: string) {
         </Route>
         <Route element={<RequireAuth />}>
           <Route path="/tickets" element={<h1>My tickets</h1>} />
-          <Route element={<RoleGate allow={["agent", "triage", "manager"]} />}>
+          <Route element={<RoleGate allow={["reviewer", "manager"]} />}>
             <Route path="/queue" element={<h1>Queue</h1>} />
           </Route>
           <Route element={<RoleGate allow={["manager"]} />}>
@@ -91,14 +91,14 @@ describe("unauthorized access", () => {
     expect(screen.queryByRole("heading", { name: "Queue" })).toBeNull();
   });
 
-  it("shows a 403 page instead of analytics for agents", () => {
-    setAuth({ user: makeUser("agent"), emailVerified: true });
+  it("shows a 403 page instead of analytics for reviewers", () => {
+    setAuth({ user: makeUser("reviewer"), emailVerified: true });
     renderAt("/analytics");
     expect(screen.getByRole("heading", { name: /access denied/i })).toBeDefined();
   });
 
   it("lets staff into the queue and managers into analytics", () => {
-    setAuth({ user: makeUser("agent"), emailVerified: true });
+    setAuth({ user: makeUser("reviewer"), emailVerified: true });
     renderAt("/queue");
     expect(screen.getByRole("heading", { name: "Queue" })).toBeDefined();
     cleanup();

@@ -1,18 +1,17 @@
 import type { Role, Ticket, TicketStatus, User } from "./types";
 import { NEXT_STATUS } from "./types";
 
-export const ROLES: Role[] = ["submitter", "agent", "triage", "manager"];
+export const ROLES: Role[] = ["submitter", "reviewer", "manager"];
 
 export const DEFAULT_ROLE: Role = "submitter";
 
 export const ROLE_TITLES: Record<Role, string> = {
   submitter: "Submitter",
-  agent: "Support Agent",
-  triage: "Triage Lead",
+  reviewer: "Ticket Reviewer",
   manager: "Support Manager",
 };
 
-export const STAFF_ROLES: Role[] = ["agent", "triage", "manager"];
+export const STAFF_ROLES: Role[] = ["reviewer", "manager"];
 
 export function isRole(value: unknown): value is Role {
   return typeof value === "string" && (ROLES as string[]).includes(value);
@@ -23,7 +22,7 @@ export function isStaff(role: Role) {
 }
 
 export function canChangeStatus(role: Role) {
-  return role === "agent" || role === "manager";
+  return role === "manager";
 }
 
 /** Roles allowed to reach each protected route. `null` means "any signed-in user". */
@@ -50,22 +49,19 @@ export function canViewTicket(user: User, ticket: Ticket) {
 /** Status changes each role may drive the ticket into. */
 export const ALLOWED_TRANSITIONS: Record<Role, TicketStatus[]> = {
   submitter: [],
-  agent: ["In Progress", "Resolved"],
-  triage: ["In Triage", "In Progress"],
+  reviewer: [],
   manager: ["In Triage", "In Progress", "Resolved", "Closed"],
 };
 
 export function canAssign(role: Role) {
-  return role === "triage" || role === "manager" || role === "agent";
+  return role === "manager";
 }
 
 /** Returns an error message when the assignment is not allowed, otherwise `null`. */
 export function checkAssignment(user: User, ticket: Ticket, assigneeId: string): string | null {
+  void assigneeId;
   if (ticket.status === "Closed") return "Closed tickets are read-only.";
   if (!canAssign(user.role)) return "Your role cannot change assignment.";
-  if (user.role === "agent" && assigneeId !== user.id) {
-    return "Agents can only assign tickets to themselves.";
-  }
   return null;
 }
 
@@ -77,7 +73,7 @@ export function checkStatusChange(user: User, ticket: Ticket, next: TicketStatus
     return "A ticket cannot move to In Progress without an assignee.";
   }
   if (!canChangeStatus(user.role)) {
-    return "Only agents and managers can change ticket status.";
+    return "Only managers can change ticket status.";
   }
   if (!ALLOWED_TRANSITIONS[user.role].includes(next)) {
     return "Your role cannot perform this status change.";

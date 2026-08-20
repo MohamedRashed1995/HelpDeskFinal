@@ -20,7 +20,7 @@ service cloud.firestore {
     }
 
     function isStaff() {
-      return role() in ['agent', 'triage', 'manager'];
+      return role() in ['reviewer', 'manager'];
     }
 
     function isManager() {
@@ -42,16 +42,19 @@ service cloud.firestore {
       // A profile is always created for the caller's own uid and always starts as submitter.
       allow create: if isOwner(uid)
         && request.resource.data.uid == uid
-        && request.resource.data.role == 'submitter'
+        && request.resource.data.role == (
+          request.auth.token.email == 'manager@helpdesk.com' ? 'manager' :
+          request.auth.token.email == 'reviewer@helpdesk.com' ? 'reviewer' : 'submitter'
+        )
         && request.resource.data.email is string
         && request.resource.data.displayName is string;
 
       // Users may maintain their own profile but never their own role.
-      // Only managers promote to agent / triage / manager.
+      // Only managers promote users to submitter, reviewer, or manager.
       allow update: if (isOwner(uid) && unchanged('role') && unchanged('uid'))
         || (isManager()
             && request.resource.data.uid == resource.data.uid
-            && request.resource.data.role in ['submitter', 'agent', 'triage', 'manager']);
+          && request.resource.data.role in ['submitter', 'reviewer', 'manager']);
 
       allow delete: if false;
     }
@@ -97,14 +100,20 @@ service cloud.firestore {
       }
 
       function statusAllowedForRole() {
-        return (role() == 'manager' && incoming().status in ['In Triage', 'In Progress', 'Resolved', 'Closed'])
-          || (role() == 'agent' && incoming().status in ['In Progress', 'Resolved']);
+        return role() == 'manager'
+          && incoming().status in ['In Triage', 'In Progress', 'Resolved', 'Closed'];
       }
 
       function assignmentAllowedForRole() {
-        return isManager()
-          || role() == 'triage'
-          || (role() == 'agent' && incoming().assigneeId == request.auth.uid);
+        return isManager();
+      }
+
+      function reviewerUpdateAllowed() {
+        return role() == 'reviewer'
+          && incoming().status == existing().status
+          && incoming().assigneeId == existing().assigneeId
+          && incoming().activity.size() > existing().activity.size()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activity', 'updatedAt']);
       }
 
       allow read: if isStaff() || isSubmitterOfTicket();
@@ -121,6 +130,7 @@ service cloud.firestore {
         && isStaff()
         && existing().status != 'Closed'
         && immutableFieldsKept()
+        && (role() == 'manager' || reviewerUpdateAllowed())
         && (!statusChanged() || (lifecycleOrdered() && assigneeRequirementMet() && statusAllowedForRole()))
         && (!assigneeChanged() || assignmentAllowedForRole());
 

@@ -11,10 +11,7 @@ export function MyTicketsPage() {
 
   const list = useMemo(() => {
     if (!user) return [];
-    const scoped =
-      user.role === "submitter"
-        ? tickets.filter((t) => t.submitterId === user.id)
-        : tickets.filter((t) => t.assigneeId === user.id || t.submitterId === user.id);
+    const scoped = user.role === "submitter" ? tickets.filter((t) => t.submitterId === user.id) : tickets;
     return scoped.filter((ticket) => {
       const matchesStatus = status === "All" || ticket.status === status;
       const haystack = `${ticket.id} ${ticket.subject} ${ticket.category}`.toLowerCase();

@@ -51,9 +51,8 @@ describe("roles", () => {
     expect(DEFAULT_ROLE).toBe("submitter");
   });
 
-  it("treats agent, triage and manager as staff", () => {
-    expect(isStaff("agent")).toBe(true);
-    expect(isStaff("triage")).toBe(true);
+  it("treats reviewer and manager as staff", () => {
+    expect(isStaff("reviewer")).toBe(true);
     expect(isStaff("manager")).toBe(true);
     expect(isStaff("submitter")).toBe(false);
   });
@@ -61,7 +60,7 @@ describe("roles", () => {
 
 describe("route permissions", () => {
   it("lets any signed-in role reach shared routes", () => {
-    for (const role of ["submitter", "agent", "triage", "manager"] as Role[]) {
+    for (const role of ["submitter", "reviewer", "manager"] as Role[]) {
       expect(canAccessRoute(role, "/")).toBe(true);
       expect(canAccessRoute(role, "/tickets")).toBe(true);
     }
@@ -69,13 +68,12 @@ describe("route permissions", () => {
 
   it("keeps submitters out of the staff queue", () => {
     expect(canAccessRoute("submitter", "/queue")).toBe(false);
-    expect(canAccessRoute("agent", "/queue")).toBe(true);
+    expect(canAccessRoute("reviewer", "/queue")).toBe(true);
   });
 
   it("restricts analytics to managers", () => {
     expect(canAccessRoute("manager", "/analytics")).toBe(true);
-    expect(canAccessRoute("triage", "/analytics")).toBe(false);
-    expect(canAccessRoute("agent", "/analytics")).toBe(false);
+    expect(canAccessRoute("reviewer", "/analytics")).toBe(false);
     expect(canAccessRoute("submitter", "/analytics")).toBe(false);
   });
 
@@ -95,8 +93,8 @@ describe("ticket ownership", () => {
     expect(canViewTicket(makeUser("submitter", "u-other"), ticket)).toBe(false);
   });
 
-  it("lets staff see every ticket", () => {
-    expect(canViewTicket(makeUser("agent"), ticket)).toBe(true);
+  it("lets reviewers see every ticket", () => {
+    expect(canViewTicket(makeUser("reviewer"), ticket)).toBe(true);
   });
 
   it("blocks notes from a submitter who does not own the ticket", () => {
@@ -106,17 +104,13 @@ describe("ticket ownership", () => {
 });
 
 describe("assignment", () => {
-  it("allows triage and managers to assign anyone", () => {
+  it("allows managers to assign anyone", () => {
     const ticket = makeTicket({ status: "In Triage" });
-    expect(checkAssignment(makeUser("triage"), ticket, "u-agent")).toBeNull();
     expect(checkAssignment(makeUser("manager"), ticket, "u-agent")).toBeNull();
   });
 
-  it("limits agents to self-assignment", () => {
-    const ticket = makeTicket({ status: "In Triage" });
-    const agent = makeUser("agent");
-    expect(checkAssignment(agent, ticket, agent.id)).toBeNull();
-    expect(checkAssignment(agent, ticket, "someone-else")).toBeTruthy();
+  it("blocks reviewer assignment", () => {
+    expect(checkAssignment(makeUser("reviewer"), makeTicket(), "u-reviewer")).toBeTruthy();
   });
 
   it("blocks submitters and closed tickets", () => {
@@ -128,7 +122,7 @@ describe("assignment", () => {
 describe("status transitions", () => {
   it("follows the lifecycle order", () => {
     const ticket = makeTicket({ status: "Open" });
-    expect(checkStatusChange(makeUser("triage"), ticket, "In Triage")).toBeTruthy();
+    expect(checkStatusChange(makeUser("reviewer"), ticket, "In Triage")).toBeTruthy();
     expect(checkStatusChange(makeUser("manager"), ticket, "Resolved")).toBeTruthy();
   });
 
@@ -142,7 +136,7 @@ describe("status transitions", () => {
 
   it("enforces role permissions on transitions", () => {
     const ticket = makeTicket({ status: "In Progress", assigneeId: "u-agent" });
-    expect(checkStatusChange(makeUser("agent"), ticket, "Resolved")).toBeNull();
+    expect(checkStatusChange(makeUser("manager"), ticket, "Resolved")).toBeNull();
     expect(checkStatusChange(makeUser("submitter", "u-submitter"), ticket, "Resolved")).toBeTruthy();
   });
 
@@ -158,7 +152,7 @@ describe("status transitions", () => {
     expect(checkClose(makeUser("manager"), resolved)).toBeNull();
     expect(checkClose(makeUser("submitter", "u-submitter"), resolved)).toBeTruthy();
     expect(checkClose(makeUser("submitter", "u-other"), resolved)).toBeTruthy();
-    expect(checkClose(makeUser("agent"), resolved)).toBeTruthy();
+    expect(checkClose(makeUser("reviewer"), resolved)).toBeTruthy();
     expect(checkClose(makeUser("manager"), makeTicket({ status: "Open" }))).toBeTruthy();
   });
 });

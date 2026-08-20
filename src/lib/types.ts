@@ -1,4 +1,4 @@
-export type Role = "submitter" | "agent" | "triage" | "manager";
+export type Role = "submitter" | "reviewer" | "manager";
 
 export type TicketStatus =
   | "Open"

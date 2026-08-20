@@ -25,15 +25,9 @@ const NAV: Record<
     { to: "/tickets/new", label: "Create Ticket", icon: Plus },
     { to: "/profile", label: "Profile", icon: UserRound },
   ],
-  agent: [
+  reviewer: [
     { to: "/", label: "Dashboard", icon: LayoutDashboard },
-    { to: "/queue", label: "My Queue", icon: Inbox },
-    { to: "/tickets", label: "My Tickets", icon: Ticket },
-    { to: "/profile", label: "Profile", icon: UserRound },
-  ],
-  triage: [
-    { to: "/", label: "Dashboard", icon: LayoutDashboard },
-    { to: "/queue", label: "Triage Queue", icon: Inbox },
+    { to: "/queue", label: "Review Queue", icon: Inbox },
     { to: "/profile", label: "Profile", icon: UserRound },
   ],
   manager: [

@@ -10,14 +10,11 @@ export function QueuePage() {
   const [category, setCategory] = useState("All");
   const [assignee, setAssignee] = useState("All");
 
-  const title =
-    user?.role === "agent" ? "My queue" : user?.role === "triage" ? "Triage queue" : "Manager queue";
+  const title = user?.role === "reviewer" ? "Review queue" : "Manager queue";
 
   const list = useMemo(() => {
     if (!user) return [];
     let scoped = tickets;
-    if (user.role === "agent") scoped = tickets.filter((t) => t.assigneeId === user.id);
-    if (user.role === "triage") scoped = tickets.filter((t) => t.status === "Open" || t.status === "In Triage");
     return scoped.filter((ticket) => {
       const matchesStatus = status === "All" || ticket.status === status;
       const matchesCategory = category === "All" || ticket.category === category;
@@ -64,7 +61,7 @@ export function QueuePage() {
           <option value="All">All assignees</option>
           <option value="unassigned">Unassigned</option>
           {users
-            .filter((item) => item.role === "agent" || item.role === "manager")
+            .filter((item) => item.role === "reviewer" || item.role === "manager")
             .map((item) => (
               <option key={item.id} value={item.id}>
                 {item.name}

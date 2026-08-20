@@ -63,7 +63,8 @@ When the required variables are missing the app starts in **demo mode**: the per
 - Sign up (`/signup`), sign in (`/signin`), sign out, forgot password (`/forgot-password`), password reset (`/reset-password`), email verification (`/verify-email`).
 - Session persistence is `browserLocalPersistence`; a single `onAuthStateChanged` listener in `src/lib/auth.tsx` owns auth state for the whole app.
 - Protected routes require authentication; email verification is tracked but does not block access.
-- Every new account is created as **submitter**. Roles are never chosen during registration; only a manager can change a role (enforced in Firestore rules).
+- New accounts default to **submitter**. The two configured privileged emails receive their mapped roles; roles are never chosen from registration input.
+- The hardcoded privileged email mapping lives in `src/lib/roleConfig.ts`: `manager@helpdesk.com` becomes `manager`, `reviewer@helpdesk.com` becomes `reviewer`, and every other email becomes `submitter`.
 - To promote `manager@helpdesk.com`, open Firebase Console -> Authentication -> Users, copy that account's UID, then open Firestore -> `users` -> the matching UID document and set `role` to `manager`. Do not edit roles from the client UI.
 
 ## Data model
@@ -81,22 +82,22 @@ Audit entries are written in the same batch as the ticket change for ticket crea
 | Route | Roles |
 | --- | --- |
 | `/`, `/tickets`, `/tickets/new`, `/tickets/:id`, `/profile` | any signed-in user (submitters only see their own tickets) |
-| `/queue` (alias `/agent/queue`) | agent, triage, manager |
+| `/queue` (alias `/agent/queue`) | reviewer, manager |
 | `/analytics` | manager |
 
 Unauthorized navigation renders a real 403 page instead of a silent redirect, and Firestore rules enforce the same boundaries server-side.
 
-Only `manager` and `agent` roles can change ticket status. Submitters can create and view their own tickets; the existing `triage` role can retain queue and assignment access without changing status.
+Only managers can change ticket status. Submitters can create and view their own tickets; reviewers can view all tickets and add comments without changing status.
 
 ## Ticket rules
 
 - Lifecycle: Open → In Triage → In Progress → Resolved → Closed (no skipping).
 - **A ticket cannot enter In Progress without an assignee** — enforced in the shared permission module, in the UI, and in `firestore.rules`.
-- Agents may only assign tickets to themselves; triage leads and managers may assign anyone.
+- Managers may assign reviewers; reviewers have read-only ticket access apart from comments.
 - Closed tickets are read-only.
 
 ## V1 scope
 
-- Roles: Submitter, Agent, Triage Lead, Manager
+- Roles: Submitter, Reviewer, Manager
 - Light / dark theme, responsive layout, accessible inline form validation
 - Out of scope: SLA timers, AI routing, Slack/Jira/Zendesk, knowledge base

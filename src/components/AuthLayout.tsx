@@ -3,7 +3,7 @@ import { Logo } from "./Logo";
 
 const ROLES = [
   { title: "Submitter", copy: "Submit and track support tickets" },
-  { title: "Agent", copy: "Manage and resolve the queue" },
+  { title: "Reviewer", copy: "Review tickets across the help desk" },
   { title: "Manager", copy: "Oversee workload and operations" },
 ];
 

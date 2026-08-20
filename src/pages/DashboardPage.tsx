@@ -20,7 +20,6 @@ export function DashboardPage() {
   if (!user) return null;
 
   const mine = tickets.filter((t) => t.submitterId === user.id);
-  const assigned = tickets.filter((t) => t.assigneeId === user.id);
   const count = (status: TicketStatus, list = tickets) =>
     list.filter((t) => t.status === status).length;
 
@@ -54,39 +53,19 @@ export function DashboardPage() {
     );
   }
 
-  if (user.role === "agent") {
+  if (user.role === "reviewer") {
     return (
       <div>
-        <h1 className="text-4xl md:text-5xl">My queue</h1>
+        <h1 className="text-4xl md:text-5xl">Review queue</h1>
         <p className="mt-3" style={{ color: "var(--muted)" }}>
-          Tickets assigned to you. In Progress requires an assignee — that rule is already satisfied here.
-        </p>
-        <div className="mt-8 grid gap-4 sm:grid-cols-3">
-          <Stat label="Assigned" value={assigned.length} />
-          <Stat label="In progress" value={count("In Progress", assigned)} />
-          <Stat label="Resolved" value={count("Resolved", assigned)} />
-        </div>
-        <div className="mt-8">
-          <TicketTable tickets={assigned.filter((t) => t.status !== "Closed")} />
-        </div>
-      </div>
-    );
-  }
-
-  if (user.role === "triage") {
-    const waiting = tickets.filter((t) => t.status === "Open" || t.status === "In Triage");
-    return (
-      <div>
-        <h1 className="text-4xl md:text-5xl">Triage</h1>
-        <p className="mt-3" style={{ color: "var(--muted)" }}>
-          Review new requests, move them into triage, and assign an agent before work starts.
+          Review all support requests. Ticket status changes are reserved for managers.
         </p>
         <div className="mt-8 grid gap-4 sm:grid-cols-2">
           <Stat label="Open" value={count("Open")} />
           <Stat label="In triage" value={count("In Triage")} />
         </div>
         <div className="mt-8">
-          <TicketTable tickets={waiting} />
+          <TicketTable tickets={tickets} />
         </div>
       </div>
     );

@@ -37,7 +37,7 @@ export function TicketDetailsPage() {
   const ticketId = ticket.id;
   const readonly = ticket.status === "Closed";
   const next = NEXT_STATUS[ticket.status];
-  const agents = users.filter((item) => item.role === "agent" || item.role === "manager");
+  const reviewers = users.filter((item) => item.role === "reviewer" || item.role === "manager");
   const assignmentRequired = next === "In Progress" && !ticket.assigneeId;
 
   async function onNote(event: FormEvent) {
@@ -123,17 +123,7 @@ export function TicketDetailsPage() {
             </p>
           ) : null}
 
-          {!readonly && user.role === "agent" && ticket.assigneeId !== user.id ? (
-            <button
-              type="button"
-              className="gold-btn mt-4 w-full rounded-[8px] py-2 text-sm font-semibold"
-              onClick={async () => setBlock((await assignTicket(ticketId, user.id)) ?? "")}
-            >
-              Assign to me
-            </button>
-          ) : null}
-
-          {!readonly && canAssign(user.role) && user.role !== "agent" ? (
+          {!readonly && canAssign(user.role) ? (
             <form
               className="mt-4 space-y-3"
               onSubmit={async (event) => {
@@ -143,12 +133,12 @@ export function TicketDetailsPage() {
               }}
             >
               <label className="block text-sm">
-                Assign agent
+                Assign reviewer
                 <select className="field" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
                   <option value="">Select</option>
-                  {agents.map((agent) => (
-                    <option key={agent.id} value={agent.id}>
-                      {agent.name}
+                  {reviewers.map((reviewer) => (
+                    <option key={reviewer.id} value={reviewer.id}>
+                      {reviewer.name}
                     </option>
                   ))}
                 </select>
@@ -176,7 +166,7 @@ export function TicketDetailsPage() {
             ) : null}
             {assignmentRequired ? (
               <p id="assignee-required" className="mt-2 text-xs" style={{ color: "var(--muted)" }}>
-                Assign an agent before moving this ticket to In Progress.
+                Assign a reviewer before moving this ticket to In Progress.
               </p>
             ) : null}
             {ticket.status === "Resolved" && user.role === "manager" ? (
