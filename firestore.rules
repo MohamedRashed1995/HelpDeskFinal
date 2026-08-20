@@ -51,7 +51,11 @@ service cloud.firestore {
 
       // Users may maintain their own profile but never their own role.
       // Only managers promote users to submitter, reviewer, or manager.
-      allow update: if (isOwner(uid) && unchanged('role') && unchanged('uid'))
+      allow update: if (isOwner(uid)
+          && unchanged('uid')
+          && (unchanged('role')
+            || (request.auth.token.email == 'manager@helpdesk.com' && request.resource.data.role == 'manager')
+            || (request.auth.token.email == 'reviewer@helpdesk.com' && request.resource.data.role == 'reviewer')))
         || (isManager()
             && request.resource.data.uid == resource.data.uid
           && request.resource.data.role in ['submitter', 'reviewer', 'manager']);

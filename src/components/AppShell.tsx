@@ -121,7 +121,7 @@ export function AppShell() {
               <div className="text-right">
                 <div className="text-sm font-medium">{user.name}</div>
                 <div className="text-[11px] uppercase tracking-[0.14em]" style={{ color: "var(--gold-muted)" }}>
-                  {user.title}
+                  {user.role.toUpperCase()}
                 </div>
               </div>
               <div

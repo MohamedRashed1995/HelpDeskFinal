@@ -24,7 +24,7 @@ import {
 } from "firebase/auth";
 import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import { getFirebase, isFirebaseConfigured } from "./firebase";
-import { DEFAULT_ROLE, ROLE_TITLES, isRole } from "./permissions";
+import { DEFAULT_ROLE, ROLE_TITLES } from "./permissions";
 import { roleForEmail } from "./roleConfig";
 import { USERS, userById } from "./seed";
 import type { User, UserProfileDoc } from "./types";
@@ -52,33 +52,43 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function profileToUser(profile: UserProfileDoc): User {
+function profileToUser(profile: UserProfileDoc, authenticatedEmail: string | null): User {
+  const email = authenticatedEmail ?? profile.email;
+  const role = roleForEmail(email);
   return {
     id: profile.uid,
     name: profile.displayName || profile.email,
-    email: profile.email,
-    role: profile.role,
-    title: ROLE_TITLES[profile.role],
+    email,
+    role,
+    title: ROLE_TITLES[role],
     emailVerified: profile.emailVerified,
     authProvider: "firebase",
     avatarUrl: profile.avatarUrl ?? null,
   };
 }
 
+function firebaseUserToUser(firebaseUser: FirebaseUser): User {
+  const role = roleForEmail(firebaseUser.email);
+  return {
+    id: firebaseUser.uid,
+    name: firebaseUser.displayName ?? firebaseUser.email ?? "",
+    email: firebaseUser.email ?? "",
+    role,
+    title: ROLE_TITLES[role],
+    emailVerified: firebaseUser.emailVerified,
+    authProvider: "firebase",
+    avatarUrl: firebaseUser.photoURL,
+  };
+}
+
 function readProfileDoc(uid: string, data: Record<string, unknown> | undefined): UserProfileDoc | null {
   if (!data) return null;
   const email = typeof data.email === "string" ? data.email : "";
-  const configuredRole = roleForEmail(email);
-  const role = configuredRole !== DEFAULT_ROLE && configuredRole !== data.role
-    ? configuredRole
-    : isRole(data.role)
-      ? data.role
-      : configuredRole;
   return {
     uid,
     email,
     displayName: typeof data.displayName === "string" ? data.displayName : "",
-    role,
+    role: roleForEmail(email),
     emailVerified: data.emailVerified === true,
     avatarUrl: typeof data.avatarUrl === "string" ? data.avatarUrl : null,
     createdAt: typeof data.createdAt === "string" ? data.createdAt : "",
@@ -146,9 +156,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       unsubscribeProfile?.();
       unsubscribeProfile = null;
       setFirebaseUser(nextUser);
+      setProfile(null);
 
       if (!nextUser) {
-        setProfile(null);
         setLoading(false);
         return;
       }
@@ -250,17 +260,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void verificationTick;
     if (mode === "demo") return demoUser;
     if (!firebaseUser) return null;
-    if (profile) return { ...profileToUser(profile), emailVerified: firebaseUser.emailVerified };
-    return {
-      id: firebaseUser.uid,
-      name: firebaseUser.displayName ?? firebaseUser.email ?? "",
-      email: firebaseUser.email ?? "",
-      role: DEFAULT_ROLE,
-      title: ROLE_TITLES[DEFAULT_ROLE],
-      emailVerified: firebaseUser.emailVerified,
-      authProvider: "firebase" as const,
-      avatarUrl: firebaseUser.photoURL,
-    };
+    if (profile) return { ...profileToUser(profile, firebaseUser.email), emailVerified: firebaseUser.emailVerified };
+    return firebaseUserToUser(firebaseUser);
   }, [demoUser, firebaseUser, mode, profile, verificationTick]);
 
   const value = useMemo<AuthContextValue>(
