@@ -70,10 +70,10 @@ describe("protected routes", () => {
     expect(screen.getByRole("heading", { name: "Sign in" })).toBeDefined();
   });
 
-  it("redirects unverified users to email verification", () => {
+  it("allows authenticated users to continue before email verification", () => {
     setAuth({ user: makeUser("submitter"), emailVerified: false });
     renderAt("/tickets");
-    expect(screen.getByRole("heading", { name: "Verify your email" })).toBeDefined();
+    expect(screen.getByRole("heading", { name: "My tickets" })).toBeDefined();
   });
 
   it("renders the route for a verified user", () => {

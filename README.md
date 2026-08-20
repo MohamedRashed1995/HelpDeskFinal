@@ -62,7 +62,7 @@ When the required variables are missing the app starts in **demo mode**: the per
 
 - Sign up (`/signup`), sign in (`/signin`), sign out, forgot password (`/forgot-password`), password reset (`/reset-password`), email verification (`/verify-email`).
 - Session persistence is `browserLocalPersistence`; a single `onAuthStateChanged` listener in `src/lib/auth.tsx` owns auth state for the whole app.
-- Protected routes are blocked until the email address is verified.
+- Protected routes require authentication; email verification is tracked but does not block access.
 - Every new account is created as **submitter**. Roles are never chosen during registration; only a manager can change a role (enforced in Firestore rules).
 
 ## Data model

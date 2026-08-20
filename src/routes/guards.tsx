@@ -18,14 +18,13 @@ export function AuthLoading() {
   );
 }
 
-/** Signed-in and verified users only; everyone else is routed to sign-in or verification. */
+/** Signed-in users only; email verification is optional and does not block access. */
 export function RequireAuth() {
-  const { user, loading, emailVerified } = useAuth();
+  const { user, loading } = useAuth();
   const location = useLocation();
 
   if (loading) return <AuthLoading />;
   if (!user) return <Navigate to="/signin" replace state={{ from: location.pathname }} />;
-  if (!emailVerified) return <Navigate to="/verify-email" replace />;
   return <Outlet />;
 }
 

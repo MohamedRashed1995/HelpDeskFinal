@@ -30,7 +30,7 @@ export function SignUpPage() {
     setLoading(true);
     try {
       await signUp({ fullName, email, password });
-      navigate("/verify-email");
+      navigate("/");
     } catch (error) {
       setFormError(mapAuthError(error));
     } finally {
