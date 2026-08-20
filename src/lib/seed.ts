@@ -6,8 +6,8 @@ type SeedTicket = Omit<Ticket, "priority" | "resolvedAt" | "closedAt"> &
 export const USERS: User[] = [
   {
     id: "u-marcus",
-    name: "Marcus Webb",
-    email: "marcus.webb@contoso.internal",
+    name: "Mohamed Rashed",
+    email: "Mohamed.webb@contoso.internal",
     role: "manager",
     title: "Support Manager",
   },

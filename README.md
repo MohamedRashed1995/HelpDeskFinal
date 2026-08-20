@@ -64,7 +64,7 @@ When the required variables are missing the app starts in **demo mode**: the per
 - Session persistence is `browserLocalPersistence`; a single `onAuthStateChanged` listener in `src/lib/auth.tsx` owns auth state for the whole app.
 - Protected routes require authentication; email verification is tracked but does not block access.
 - New accounts default to **submitter**. The two configured privileged emails receive their mapped roles; roles are never chosen from registration input.
-- The hardcoded privileged email mapping lives in `src/lib/roleConfig.ts`: `manager@helpdesk.com` becomes `manager`, `reviewer@helpdesk.com` becomes `reviewer`, and every other email becomes `submitter`.
+- The hardcoded privileged email mapping lives in `src/lib/roleConfig.ts`: `manager@helpdesk.com` and `Mohamed.webb@contoso.internal` become `manager`, `reviewer@helpdesk.com` becomes `reviewer`, and every other email becomes `submitter`.
 - Create both accounts in Firebase Console -> Authentication -> Users using email/password sign-up: `manager@helpdesk.com` and `reviewer@helpdesk.com`. The app assigns their roles automatically when their profiles are created or loaded.
 - To promote `manager@helpdesk.com`, open Firebase Console -> Authentication -> Users, copy that account's UID, then open Firestore -> `users` -> the matching UID document and set `role` to `manager`. Do not edit roles from the client UI.
 

@@ -43,7 +43,9 @@ service cloud.firestore {
       allow create: if isOwner(uid)
         && request.resource.data.uid == uid
         && request.resource.data.role == (
-          request.auth.token.email == 'manager@helpdesk.com' ? 'manager' :
+          (request.auth.token.email == 'manager@helpdesk.com'
+            || request.auth.token.email == 'Mohamed.webb@contoso.internal'
+            || request.auth.token.email == 'mohamed.webb@contoso.internal') ? 'manager' :
           request.auth.token.email == 'reviewer@helpdesk.com' ? 'reviewer' : 'submitter'
         )
         && request.resource.data.email is string
@@ -54,7 +56,10 @@ service cloud.firestore {
       allow update: if (isOwner(uid)
           && unchanged('uid')
           && (unchanged('role')
-            || (request.auth.token.email == 'manager@helpdesk.com' && request.resource.data.role == 'manager')
+            || ((request.auth.token.email == 'manager@helpdesk.com'
+              || request.auth.token.email == 'Mohamed.webb@contoso.internal'
+              || request.auth.token.email == 'mohamed.webb@contoso.internal')
+              && request.resource.data.role == 'manager')
             || (request.auth.token.email == 'reviewer@helpdesk.com' && request.resource.data.role == 'reviewer')))
         || (isManager()
             && request.resource.data.uid == resource.data.uid
