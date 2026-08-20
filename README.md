@@ -104,6 +104,16 @@ Every user profile and ticket carries `organizationId` and `projectId`. The curr
 
 Audit records are append-only, include organization/project scope, and are written in the same Firestore batch as ticket mutations. Closed tickets cannot be reopened or deleted.
 
+## Reviewer provisioning
+
+Reviewer accounts are provisioned outside the browser with the Firebase Admin SDK. Copy `.env.seed.example` to `.env.seed`, fill in the local secret values, authenticate Application Default Credentials, and run:
+
+```bash
+npm run seed:reviewers
+```
+
+The script is idempotent by email, creates or updates Firebase Authentication users, and writes `users/{uid}` profiles with `role: "reviewer"`, `active: true`, and the configured scope. Never put service-account keys or seed passwords in `src/`, `public/`, `VITE_*` variables, or source control.
+
 ## Ticket rules
 
 - Lifecycle: Open → In Triage → In Progress → Resolved → Closed (no skipping).

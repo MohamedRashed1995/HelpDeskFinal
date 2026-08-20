@@ -10,10 +10,12 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
+    "seed:reviewers": "node --env-file=.env.seed scripts/seed-reviewers.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
     "firebase": "12.17.1",
+    "firebase-admin": "^13.10.0",
     "lucide-react": "^1.33.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

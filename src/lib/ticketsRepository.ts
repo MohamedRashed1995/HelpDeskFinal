@@ -24,8 +24,30 @@ function newTicketId() {
   return `HD-${suffix}`;
 }
 
-function activity(user: User, kind: Activity["kind"], message: string, from?: string, to?: string): Activity {
-  return { id: crypto.randomUUID(), at: nowIso(), userId: user.id, kind, message, from, to };
+function activity(
+  user: User,
+  kind: Activity["kind"],
+  message: string,
+  from?: string,
+  to?: string,
+  ticketId?: string,
+  type?: Activity["type"],
+): Activity {
+  return {
+    id: crypto.randomUUID(),
+    at: nowIso(),
+    userId: user.id,
+    kind,
+    message,
+    from,
+    to,
+    ticketId,
+    actorName: user.name,
+    actorRole: user.role,
+    action: type === "internal_note" ? "internal_note" : type === "status_changed" ? "status_changed" : type === "reviewer_assigned" ? "reviewer_assigned" : undefined,
+    type,
+    text: type === "internal_note" ? message : undefined,
+  };
 }
 
 function toTicket(id: string, data: Record<string, unknown>): Ticket {
@@ -122,6 +144,49 @@ export function subscribeToUsers(
   );
 }
 
+export function subscribeToAuditLogs(
+  user: User,
+  onData: (logs: Array<{ ticketId: string; activity: Activity }>) => void,
+  onError?: (error: Error) => void,
+): Unsubscribe {
+  if (!isStaff(user.role)) return () => undefined;
+  const { db } = getFirebase();
+  return onSnapshot(
+    query(
+      collection(db, "auditLogs"),
+      where("organizationId", "==", user.organizationId ?? DEFAULT_SCOPE.organizationId),
+      where("projectId", "==", user.projectId ?? DEFAULT_SCOPE.projectId),
+    ),
+    (snapshot) => {
+      onData(
+        snapshot.docs
+          .filter((entry) => entry.data().action === "ticket.note")
+          .map((entry) => {
+            const data = entry.data();
+            const text = String(data.newValue ?? "");
+            return {
+              ticketId: String(data.ticketId),
+              activity: {
+                id: entry.id,
+                at: String(data.createdAt ?? nowIso()),
+                userId: String(data.actorId ?? ""),
+                kind: "note",
+                message: text,
+                ticketId: String(data.ticketId),
+                actorName: String(data.actorName ?? "Unknown"),
+                actorRole: data.actorRole as User["role"],
+                action: "internal_note",
+                type: "internal_note",
+                text,
+              },
+            };
+          }),
+      );
+    },
+    (error) => onError?.(error),
+  );
+}
+
 type AuditInput = {
   ticketId: string;
   actorId: string;
@@ -130,6 +195,8 @@ type AuditInput = {
   newValue: string | null;
   organizationId?: string;
   projectId?: string;
+  actorName?: string;
+  actorRole?: User["role"];
 };
 
 function auditRef(input: AuditInput) {
@@ -185,7 +252,7 @@ export async function createTicket(
     updatedAt: createdAt,
     resolvedAt: null,
     closedAt: null,
-    activity: [activity(user, "status", "Ticket opened", undefined, "Open")],
+    activity: [activity(user, "status", "Ticket opened", undefined, "Open", id, "status_changed")],
     organizationId: user.organizationId ?? DEFAULT_SCOPE.organizationId,
     projectId: user.projectId ?? DEFAULT_SCOPE.projectId,
   };
@@ -218,21 +285,19 @@ export async function createTicket(
 
 export async function addNote(user: User, ticket: Ticket, message: string) {
   assertCanManageTicket(user, ticket, "ticket:edit");
-  await commit(
-    ticket.id,
-    { updatedAt: nowIso(), activity: arrayUnion(activity(user, "note", message)) },
-    [
-      {
-        ticketId: ticket.id,
-        actorId: user.id,
-        action: "ticket.note",
-        oldValue: null,
-        newValue: message.slice(0, 500),
-        organizationId: ticket.organizationId,
-        projectId: ticket.projectId,
-      },
-    ],
-  );
+  const { db } = getFirebase();
+  const { ref, payload } = auditRef({
+    ticketId: ticket.id,
+    actorId: user.id,
+    action: "ticket.note",
+    oldValue: null,
+    newValue: message.slice(0, 500),
+    organizationId: ticket.organizationId,
+    projectId: ticket.projectId,
+    actorName: user.name,
+    actorRole: user.role,
+  });
+  await writeBatch(db).set(ref, payload).commit();
 }
 
 export async function assignTicket(user: User, ticket: Ticket, assigneeId: string, assigneeName: string) {
@@ -245,9 +310,7 @@ export async function assignTicket(user: User, ticket: Ticket, assigneeId: strin
       assignedById: user.id,
       assignedAt: at,
       updatedAt: at,
-      activity: arrayUnion(
-        activity(user, "assignment", `Assigned to ${assigneeName}`, ticket.assigneeId ?? undefined, assigneeId),
-      ),
+      activity: arrayUnion(activity(user, "assignment", `Assigned to ${assigneeName}`, ticket.assigneeId ?? undefined, assigneeId, ticket.id, "reviewer_assigned")),
     },
     [
       {
@@ -269,7 +332,7 @@ export async function changeStatus(user: User, ticket: Ticket, next: TicketStatu
   const update: Record<string, unknown> = {
     status: next,
     updatedAt: at,
-    activity: arrayUnion(activity(user, "status", `Status updated to ${next}`, ticket.status, next)),
+    activity: arrayUnion(activity(user, "status", `Status updated to ${next}`, ticket.status, next, ticket.id, "status_changed")),
   };
   if (next === "Resolved") update.resolvedAt = at;
   if (next === "Closed") update.closedAt = at;
@@ -295,7 +358,7 @@ export async function changePriority(user: User, ticket: Ticket, priority: Ticke
   if (ticket.status === "Closed") throw new Error("Closed tickets are read-only.");
   await commit(
     ticket.id,
-    { priority, updatedAt: nowIso(), activity: arrayUnion(activity(user, "status", `Priority updated to ${priority}`)) },
+    { priority, updatedAt: nowIso(), activity: arrayUnion(activity(user, "status", `Priority updated to ${priority}`, undefined, undefined, ticket.id, "priority_changed")) },
     [{
       ticketId: ticket.id,
       actorId: user.id,

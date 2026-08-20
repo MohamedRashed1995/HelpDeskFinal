@@ -163,9 +163,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
       },
     );
     const unsubscribeUsers = repository.subscribeToUsers(setRemoteUsers, () => setRemoteUsers([]));
+    const unsubscribeAudit = repository.subscribeToAuditLogs(
+      user,
+      (entries) => {
+        setTickets((current) =>
+          current.map((ticket) => {
+            const notes = entries.filter((entry) => entry.ticketId === ticket.id).map((entry) => entry.activity);
+            if (!notes.length) return ticket;
+            const activity = [
+              ...ticket.activity.filter((item) => item.type !== "internal_note"),
+              ...notes,
+            ].sort((a, b) => b.at.localeCompare(a.at));
+            return { ...ticket, activity };
+          }),
+        );
+      },
+      (error) => console.error("[store] Failed to subscribe to internal notes", error),
+    );
     return () => {
       unsubscribeTickets();
       unsubscribeUsers();
+      unsubscribeAudit();
     };
   }, [mode, user]);
 
@@ -257,12 +275,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if (mode === "firebase") {
         await repository.addNote(user, ticket, message);
-      } else {
+        const at = nowIso();
         patchLocal(ticketId, (current) => ({
           ...current,
-          updatedAt: nowIso(),
+          updatedAt: at,
           activity: [
-            { id: crypto.randomUUID(), at: nowIso(), userId: user.id, kind: "note", message },
+            {
+              id: crypto.randomUUID(),
+              at,
+              userId: user.id,
+              kind: "note",
+              message,
+              ticketId,
+              actorName: user.name,
+              actorRole: user.role,
+              action: "internal_note",
+              type: "internal_note",
+              text: message,
+            },
+            ...current.activity,
+          ],
+        }));
+      } else {
+        const at = nowIso();
+        patchLocal(ticketId, (current) => ({
+          ...current,
+          updatedAt: at,
+          activity: [
+            {
+              id: crypto.randomUUID(),
+              at,
+              userId: user.id,
+              kind: "note",
+              message,
+              ticketId,
+              actorName: user.name,
+              actorRole: user.role,
+              action: "internal_note",
+              type: "internal_note",
+              text: message,
+            },
             ...current.activity,
           ],
         }));
@@ -278,12 +330,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const ticket = tickets.find((item) => item.id === ticketId);
       if (!user || !ticket) return "Ticket not found.";
       const assignee = users.find((item) => item.id === assigneeId);
+      if (ticket.assigneeId === assigneeId) return "That reviewer is already assigned.";
       const blocked = checkAssignment(user, ticket, assigneeId, assignee);
       if (blocked) return blocked;
 
       const assigneeName = users.find((item) => item.id === assigneeId)?.name ?? assigneeId;
       if (mode === "firebase") {
         await repository.assignTicket(user, ticket, assigneeId, assigneeName);
+        patchLocal(ticketId, (current) => ({
+          ...current,
+          assigneeId,
+          assignedById: user.id,
+          assignedAt: nowIso(),
+          updatedAt: nowIso(),
+          activity: [
+            {
+              id: crypto.randomUUID(),
+              at: nowIso(),
+              userId: user.id,
+              kind: "assignment",
+              message: `Assigned to ${assigneeName}`,
+              from: current.assigneeId ?? undefined,
+              to: assigneeId,
+              ticketId,
+              actorName: user.name,
+              actorRole: user.role,
+              action: "reviewer_assigned",
+              type: "reviewer_assigned",
+            },
+            ...current.activity,
+          ],
+        }));
       } else {
         patchLocal(ticketId, (current) => ({
           ...current,
@@ -300,6 +377,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
               message: `Assigned to ${assigneeName}`,
               from: current.assigneeId ?? undefined,
               to: assigneeId,
+              ticketId,
+              actorName: user.name,
+              actorRole: user.role,
+              action: "reviewer_assigned",
+              type: "reviewer_assigned",
             },
             ...current.activity,
           ],
@@ -315,6 +397,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async (ticket: Ticket, next: TicketStatus, actor: User) => {
       if (mode === "firebase") {
         await repository.changeStatus(actor, ticket, next);
+        const at = nowIso();
+        patchLocal(ticket.id, (current) => ({
+          ...current,
+          status: next,
+          updatedAt: at,
+          resolvedAt: next === "Resolved" ? at : current.resolvedAt,
+          closedAt: next === "Closed" ? at : current.closedAt,
+          activity: [
+            {
+              id: crypto.randomUUID(),
+              at,
+              userId: actor.id,
+              kind: "status",
+              message: `Status updated to ${next}`,
+              from: current.status,
+              to: next,
+              ticketId: ticket.id,
+              actorName: actor.name,
+              actorRole: actor.role,
+              action: "status_changed",
+              type: "status_changed",
+            },
+            ...current.activity,
+          ],
+        }));
         return;
       }
       const at = nowIso();
@@ -333,6 +440,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             message: `Status updated to ${next}`,
             from: current.status,
             to: next,
+            ticketId: ticket.id,
+            actorName: actor.name,
+            actorRole: actor.role,
+            action: "status_changed",
+            type: "status_changed",
           },
           ...current.activity,
         ],

@@ -18,6 +18,8 @@ export function TicketDetailsPage() {
   const [note, setNote] = useState("");
   const [assignee, setAssignee] = useState("");
   const [block, setBlock] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState<"status" | "note" | "assign" | "priority" | null>(null);
 
   const ticket = tickets.find((item) => item.id === id);
   if (!ticket || !user) {
@@ -37,14 +39,32 @@ export function TicketDetailsPage() {
   const ticketId = ticket.id;
   const readonly = ticket.status === "Closed";
   const next = NEXT_STATUS[ticket.status];
-  const reviewers = users.filter((item) => item.role === "reviewer" || item.role === "manager");
+  const reviewers = users.filter((item) => item.role === "reviewer" && item.active !== false);
   const assignmentRequired = next === "In Progress" && !ticket.assigneeId;
 
   async function onNote(event: FormEvent) {
     event.preventDefault();
-    if (!note.trim()) return;
-    setBlock((await addNote(ticketId, note.trim())) ?? "");
-    setNote("");
+    const message = note.trim();
+    if (!message) {
+      setBlock("Enter a note before submitting.");
+      return;
+    }
+    setBusy("note");
+    setBlock("");
+    setNotice("");
+    try {
+      const error = await addNote(ticketId, message);
+      if (error) setBlock(error);
+      else {
+        setNote("");
+        setNotice("Internal note added successfully.");
+      }
+    } catch (error) {
+      console.error("[TicketDetailsPage] Failed to add internal note", error);
+      setBlock("Could not add the internal note. Please try again.");
+    } finally {
+      setBusy(null);
+    }
   }
 
   return (
@@ -129,7 +149,23 @@ export function TicketDetailsPage() {
               onSubmit={async (event) => {
                 event.preventDefault();
                 if (!assignee) return;
-                setBlock((await assignTicket(ticketId, assignee)) ?? "");
+                setBusy("assign");
+                setBlock("");
+                setNotice("");
+                try {
+                  const error = await assignTicket(ticketId, assignee);
+                  if (error === "That reviewer is already assigned.") setNotice(error);
+                  else if (error) setBlock(error);
+                  else {
+                    setNotice("Reviewer assigned successfully.");
+                    setAssignee("");
+                  }
+                } catch (error) {
+                  console.error("[TicketDetailsPage] Failed to assign reviewer", error);
+                  setBlock("Could not assign the reviewer. Please try again.");
+                } finally {
+                  setBusy(null);
+                }
               }}
             >
               <label className="block text-sm">
@@ -138,15 +174,20 @@ export function TicketDetailsPage() {
                   <option value="">Select</option>
                   {reviewers.map((reviewer) => (
                     <option key={reviewer.id} value={reviewer.id}>
-                      {reviewer.name}
+                      {reviewer.name} ({reviewer.email})
                     </option>
                   ))}
                 </select>
               </label>
-              <button type="submit" className="gold-btn w-full rounded-[8px] py-2 text-sm font-semibold">
-                Assign
+              <button type="submit" className="gold-btn w-full rounded-[8px] py-2 text-sm font-semibold disabled:opacity-60" disabled={busy !== null}>
+                {busy === "assign" ? "Assigning…" : "Assign"}
               </button>
             </form>
+          ) : null}
+          {user.role === "manager" && reviewers.length === 0 ? (
+            <p className="mt-4 text-sm" style={{ color: "var(--muted)" }}>
+              No active reviewers are available. Create or initialize Reviewer accounts before assigning a ticket.
+            </p>
           ) : null}
         </div>
 
@@ -172,11 +213,25 @@ export function TicketDetailsPage() {
               <button
                 type="button"
                 className="gold-btn mt-4 w-full rounded-[8px] py-2 text-sm font-semibold disabled:opacity-60"
-                onClick={async () => setBlock((await advanceStatus(ticketId)) ?? "")}
-                disabled={assignmentRequired}
+                onClick={async () => {
+                  setBusy("status");
+                  setBlock("");
+                  setNotice("");
+                  try {
+                    const error = await advanceStatus(ticketId);
+                    if (error) setBlock(error);
+                    else setNotice(`Ticket moved to ${next} successfully.`);
+                  } catch (error) {
+                    console.error("[TicketDetailsPage] Failed to change ticket status", error);
+                    setBlock("Could not update the ticket status. Please try again.");
+                  } finally {
+                    setBusy(null);
+                  }
+                }}
+                disabled={assignmentRequired || busy !== null}
                 aria-describedby={assignmentRequired ? "assignee-required" : undefined}
               >
-                Move to {next}
+                {busy === "status" ? "Updating…" : `Move to ${next}`}
               </button>
             ) : null}
             {assignmentRequired ? (
@@ -189,7 +244,22 @@ export function TicketDetailsPage() {
                 type="button"
                 className="mt-3 w-full rounded-[8px] py-2 text-sm font-semibold"
                 style={{ border: "1px solid var(--border)" }}
-                onClick={async () => setBlock((await closeTicket(ticketId)) ?? "")}
+                onClick={async () => {
+                  setBusy("status");
+                  setBlock("");
+                  setNotice("");
+                  try {
+                    const error = await closeTicket(ticketId);
+                    if (error) setBlock(error);
+                    else setNotice("Ticket closed successfully.");
+                  } catch (error) {
+                    console.error("[TicketDetailsPage] Failed to close ticket", error);
+                    setBlock("Could not close the ticket. Please try again.");
+                  } finally {
+                    setBusy(null);
+                  }
+                }}
+                disabled={busy !== null}
               >
                 Close ticket
               </button>
@@ -199,6 +269,7 @@ export function TicketDetailsPage() {
                 {block}
               </p>
             ) : null}
+            {notice ? <p className="mt-3 text-sm" style={{ color: "var(--primary)" }} role="status">{notice}</p> : null}
           </div>
         ) : readonly ? (
           <div className="rounded-[12px] p-5 text-sm" style={{ background: "var(--surface)", color: "var(--muted)" }}>
@@ -210,9 +281,11 @@ export function TicketDetailsPage() {
           <form className="rounded-[12px] p-5" style={{ background: "var(--surface)" }} onSubmit={onNote}>
             <h2 className="text-xl">Internal note</h2>
             <textarea className="field mt-3 min-h-24" value={note} onChange={(e) => setNote(e.target.value)} />
-            <button type="submit" className="mt-3 text-sm font-semibold" style={{ color: "var(--gold)" }}>
-              Add note
+            <button type="submit" className="mt-3 text-sm font-semibold disabled:opacity-60" style={{ color: "var(--gold)" }} disabled={busy !== null}>
+              {busy === "note" ? "Adding…" : "Add note"}
             </button>
+            {block ? <p className="mt-3 text-sm" style={{ color: "var(--error)" }} role="alert">{block}</p> : null}
+            {notice ? <p className="mt-3 text-sm" style={{ color: "var(--primary)" }} role="status">{notice}</p> : null}
           </form>
         ) : null}
       </aside>

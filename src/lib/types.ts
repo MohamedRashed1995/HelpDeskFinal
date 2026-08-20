@@ -85,6 +85,8 @@ export type AuditLog = {
   createdAt: string;
   organizationId: string;
   projectId: string;
+  actorName?: string;
+  actorRole?: Role;
 };
 
 export type Activity = {
@@ -95,6 +97,12 @@ export type Activity = {
   message: string;
   from?: string;
   to?: string;
+  ticketId?: string;
+  actorName?: string;
+  actorRole?: Role;
+  action?: string;
+  type?: "internal_note" | "status_changed" | "reviewer_assigned" | "priority_changed";
+  text?: string;
 };
 
 export type Ticket = {
