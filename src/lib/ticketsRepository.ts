@@ -11,6 +11,7 @@ import {
 } from "firebase/firestore";
 import { getFirebase } from "./firebase";
 import { ROLE_TITLES, isRole, isStaff } from "./permissions";
+import { SEED_TICKETS } from "./seed";
 import type { Activity, AuditAction, Role, Ticket, TicketStatus, User } from "./types";
 
 function nowIso() {
@@ -68,7 +69,7 @@ export function subscribeToTickets(
       const list = snapshot.docs
         .map((entry) => sortActivity(toTicket(entry.id, entry.data())))
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-      onData(list);
+      onData(list.length === 0 && isStaff(user.role) ? SEED_TICKETS : list);
     },
     (error) => onError?.(error),
   );
