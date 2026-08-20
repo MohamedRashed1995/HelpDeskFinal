@@ -15,6 +15,7 @@ import type { Ticket, TicketStatus, User } from "./types";
 import { NEXT_STATUS } from "./types";
 
 const STORAGE_KEY = "helpdesk-lite-state-v1";
+const FIREBASE_FALLBACK_TICKETS_KEY = "helpdesk-lite-fallback-tickets-v1";
 
 type Toast = { id: string; text: string } | null;
 
@@ -59,6 +60,55 @@ function loadLocalState(): { tickets: Ticket[]; theme: "dark" | "light" } {
   }
 }
 
+function loadFallbackTickets(userId?: string): Ticket[] {
+  try {
+    const raw = localStorage.getItem(FIREBASE_FALLBACK_TICKETS_KEY);
+    const tickets = raw ? (JSON.parse(raw) as Ticket[]) : [];
+    return Array.isArray(tickets) ? tickets.filter((ticket) => !userId || ticket.submitterId === userId) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveFallbackTicket(ticket: Ticket) {
+  try {
+    const existing = loadFallbackTickets();
+    localStorage.setItem(
+      FIREBASE_FALLBACK_TICKETS_KEY,
+      JSON.stringify([...existing.filter((item) => item.id !== ticket.id), ticket]),
+    );
+  } catch (error) {
+    console.error("[store] Could not persist fallback ticket to localStorage", { ticketId: ticket.id, error });
+  }
+}
+
+function mergeTickets(remote: Ticket[], fallback: Ticket[]): Ticket[] {
+  const byId = new Map(fallback.map((ticket) => [ticket.id, ticket]));
+  remote.forEach((ticket) => byId.set(ticket.id, ticket));
+  return [...byId.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+function createLocalTicket(user: User, input: { subject: string; category: string; description: string; priority?: Ticket["priority"] }): Ticket {
+  const createdAt = nowIso();
+  return {
+    id: `HD-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+    subject: input.subject,
+    category: input.category,
+    description: input.description,
+    status: "Open",
+    priority: input.priority ?? "Normal",
+    submitterId: user.id,
+    assigneeId: null,
+    assignedById: null,
+    assignedAt: null,
+    createdAt,
+    updatedAt: createdAt,
+    resolvedAt: null,
+    closedAt: null,
+    activity: [{ id: crypto.randomUUID(), at: createdAt, userId: user.id, kind: "status", message: "Ticket opened", to: "Open" }],
+  };
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const { user, mode, signOutUser } = useAuth();
   const initial = loadLocalState();
@@ -86,8 +136,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
     setTicketsError("");
-    const unsubscribeTickets = repository.subscribeToTickets(user, setTickets, (error) =>
-      setTicketsError(error.message),
+    setTickets(loadFallbackTickets(user.id));
+    const unsubscribeTickets = repository.subscribeToTickets(
+      user,
+      (remoteTickets) => setTickets((fallback) => mergeTickets(remoteTickets, [...fallback, ...loadFallbackTickets(user.id)])),
+      (error) => {
+        console.error("[store] Firestore ticket subscription failed; using local fallback", error);
+        setTickets(loadFallbackTickets(user.id));
+        setTicketsError("");
+      },
     );
     const unsubscribeUsers = repository.subscribeToUsers(setRemoteUsers, () => setRemoteUsers([]));
     return () => {
@@ -122,9 +179,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async (input) => {
       if (!user) throw new Error("Not authenticated");
       if (mode === "firebase") {
-        const created = await repository.createTicket(user, input);
-        showToast("Ticket created successfully");
-        return created;
+        try {
+          const created = await repository.createTicket(user, input);
+          showToast("Ticket created successfully");
+          return created;
+        } catch (error) {
+          console.error("[store] Firestore ticket creation failed; saving locally", error);
+          const created = createLocalTicket(user, input);
+          saveFallbackTicket(created);
+          setTickets((list) => [created, ...list.filter((ticket) => ticket.id !== created.id)]);
+          showToast("Ticket created locally");
+          return created;
+        }
       }
 
       const maxId = tickets.reduce((max, ticket) => {

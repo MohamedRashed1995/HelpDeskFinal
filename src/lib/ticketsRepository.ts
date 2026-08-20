@@ -167,7 +167,16 @@ export async function createTicket(
     newValue: "Open",
   });
   batch.set(ref, payload);
-  await batch.commit();
+  try {
+    await batch.commit();
+  } catch (error) {
+    console.error("[ticketsRepository] Failed to create ticket in Firestore", {
+      ticketId: id,
+      userId: user.id,
+      error,
+    });
+    throw error;
+  }
 
   return ticket;
 }
