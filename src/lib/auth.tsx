@@ -100,7 +100,7 @@ function readProfileDoc(uid: string, data: Record<string, unknown> | undefined):
  * Creates `users/{uid}` on first sign-in and keeps `emailVerified` in sync.
  * The role is never taken from client input — new accounts use the configured email mapping.
  */
-async function ensureProfile(firebaseUser: FirebaseUser) {
+async function ensureProfile(firebaseUser: FirebaseUser, assignedRole = roleForEmail(firebaseUser.email)) {
   const { db } = getFirebase();
   const ref = doc(db, "users", firebaseUser.uid);
   const snapshot = await getDoc(ref);
@@ -111,7 +111,7 @@ async function ensureProfile(firebaseUser: FirebaseUser) {
       uid: firebaseUser.uid,
       email: firebaseUser.email ?? "",
       displayName: firebaseUser.displayName ?? firebaseUser.email ?? "",
-      role: roleForEmail(firebaseUser.email),
+      role: assignedRole,
       emailVerified: firebaseUser.emailVerified,
       avatarUrl: firebaseUser.photoURL,
       createdAt: now,
@@ -125,9 +125,8 @@ async function ensureProfile(firebaseUser: FirebaseUser) {
     await setDoc(ref, { emailVerified: firebaseUser.emailVerified, updatedAt: now }, { merge: true });
   }
 
-  const configuredRole = roleForEmail(firebaseUser.email);
-  if (configuredRole !== DEFAULT_ROLE && snapshot.data().role !== configuredRole) {
-    await setDoc(ref, { role: configuredRole, updatedAt: now }, { merge: true });
+  if (assignedRole !== DEFAULT_ROLE && snapshot.data().role !== assignedRole) {
+    await setDoc(ref, { role: assignedRole, updatedAt: now }, { merge: true });
   }
 }
 
@@ -196,9 +195,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp = useCallback(
     async ({ fullName, email, password }: { fullName: string; email: string; password: string }) => {
       const { auth } = getFirebase();
-      const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-      await updateProfile(credential.user, { displayName: fullName.trim() });
-      await ensureProfile(credential.user);
+      const normalizedEmail = email.trim();
+      const displayName = fullName.trim();
+      const assignedRole = roleForEmail(normalizedEmail);
+      const credential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
+      await updateProfile(credential.user, { displayName });
+      await ensureProfile(credential.user, assignedRole);
+      setProfile({
+        uid: credential.user.uid,
+        email: normalizedEmail,
+        displayName,
+        role: assignedRole,
+        emailVerified: credential.user.emailVerified,
+        avatarUrl: credential.user.photoURL,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
       await sendEmailVerification(credential.user);
     },
     [],

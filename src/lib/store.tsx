@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { useAuth } from "./auth";
-import { checkAssignment, checkClose, checkNote, checkStatusChange } from "./permissions";
+import { checkAssignment, checkClose, checkNote, checkStatusChange, isStaff } from "./permissions";
 import { SEED_TICKETS, USERS } from "./seed";
 import * as repository from "./ticketsRepository";
 import type { Ticket, TicketStatus, User } from "./types";
@@ -88,6 +88,11 @@ function mergeTickets(remote: Ticket[], fallback: Ticket[]): Ticket[] {
   return [...byId.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
+function fallbackTicketsForUser(user: User): Ticket[] {
+  const local = loadFallbackTickets(isStaff(user.role) ? undefined : user.id);
+  return isStaff(user.role) ? mergeTickets(local, SEED_TICKETS) : local;
+}
+
 function createLocalTicket(user: User, input: { subject: string; category: string; description: string; priority?: Ticket["priority"] }): Ticket {
   const createdAt = nowIso();
   return {
@@ -136,13 +141,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
     setTicketsError("");
-    setTickets(loadFallbackTickets(user.id));
+    setTickets(fallbackTicketsForUser(user));
     const unsubscribeTickets = repository.subscribeToTickets(
       user,
-      (remoteTickets) => setTickets((fallback) => mergeTickets(remoteTickets, [...fallback, ...loadFallbackTickets(user.id)])),
+      (remoteTickets) =>
+        setTickets((fallback) => {
+          const local = loadFallbackTickets(isStaff(user.role) ? undefined : user.id);
+          const fallbackTickets = remoteTickets.length
+            ? [...fallback, ...local]
+            : [...fallback, ...fallbackTicketsForUser(user)];
+          return mergeTickets(remoteTickets, fallbackTickets);
+        }),
       (error) => {
         console.error("[store] Firestore ticket subscription failed; using local fallback", error);
-        setTickets(loadFallbackTickets(user.id));
+        setTickets(fallbackTicketsForUser(user));
         setTicketsError("");
       },
     );
