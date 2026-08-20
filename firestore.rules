@@ -1,0 +1,151 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function profileExists() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function role() {
+      return isSignedIn() && profileExists() ? profile().role : 'anonymous';
+    }
+
+    function isStaff() {
+      return role() in ['agent', 'triage', 'manager'];
+    }
+
+    function isManager() {
+      return role() == 'manager';
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // ---------------------------------------------------------------- users
+    match /users/{uid} {
+      function unchanged(field) {
+        return !(field in request.resource.data) || request.resource.data[field] == resource.data[field];
+      }
+
+      allow read: if isOwner(uid) || isStaff();
+
+      // A profile is always created for the caller's own uid and always starts as submitter.
+      allow create: if isOwner(uid)
+        && request.resource.data.uid == uid
+        && request.resource.data.role == 'submitter'
+        && request.resource.data.email is string
+        && request.resource.data.displayName is string;
+
+      // Users may maintain their own profile but never their own role.
+      // Only managers promote to agent / triage / manager.
+      allow update: if (isOwner(uid) && unchanged('role') && unchanged('uid'))
+        || (isManager()
+            && request.resource.data.uid == resource.data.uid
+            && request.resource.data.role in ['submitter', 'agent', 'triage', 'manager']);
+
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------- tickets
+    match /tickets/{ticketId} {
+      function existing() {
+        return resource.data;
+      }
+
+      function incoming() {
+        return request.resource.data;
+      }
+
+      function isSubmitterOfTicket() {
+        return isSignedIn() && existing().submitterId == request.auth.uid;
+      }
+
+      function statusChanged() {
+        return incoming().status != existing().status;
+      }
+
+      function assigneeChanged() {
+        return incoming().assigneeId != existing().assigneeId;
+      }
+
+      function immutableFieldsKept() {
+        return incoming().id == existing().id
+          && incoming().submitterId == existing().submitterId
+          && incoming().createdAt == existing().createdAt;
+      }
+
+      function lifecycleOrdered() {
+        return (existing().status == 'Open' && incoming().status == 'In Triage')
+          || (existing().status == 'In Triage' && incoming().status == 'In Progress')
+          || (existing().status == 'In Progress' && incoming().status == 'Resolved')
+          || (existing().status == 'Resolved' && incoming().status == 'Closed');
+      }
+
+      // A ticket can never enter In Progress without an assignee.
+      function assigneeRequirementMet() {
+        return incoming().status != 'In Progress' || incoming().assigneeId != null;
+      }
+
+      function statusAllowedForRole() {
+        return (role() == 'manager' && incoming().status in ['In Triage', 'In Progress', 'Resolved', 'Closed'])
+          || (role() == 'triage' && incoming().status in ['In Triage', 'In Progress'])
+          || (role() == 'agent' && incoming().status in ['In Progress', 'Resolved'])
+          || (role() == 'submitter' && incoming().status == 'Closed' && isSubmitterOfTicket());
+      }
+
+      function assignmentAllowedForRole() {
+        return isManager()
+          || role() == 'triage'
+          || (role() == 'agent' && incoming().assigneeId == request.auth.uid);
+      }
+
+      allow read: if isStaff() || isSubmitterOfTicket();
+
+      allow create: if isSignedIn()
+        && incoming().submitterId == request.auth.uid
+        && incoming().status == 'Open'
+        && incoming().assigneeId == null
+        && incoming().id == ticketId
+        && incoming().subject is string
+        && incoming().description is string;
+
+      allow update: if isSignedIn()
+        && (isStaff() || isSubmitterOfTicket())
+        && existing().status != 'Closed'
+        && immutableFieldsKept()
+        && (!statusChanged() || (lifecycleOrdered() && assigneeRequirementMet() && statusAllowedForRole()))
+        && (!assigneeChanged() || assignmentAllowedForRole());
+
+      allow delete: if false;
+    }
+
+    // ------------------------------------------------------------ auditLogs
+    // Append-only: created by the acting user, never updated or deleted by clients.
+    match /auditLogs/{logId} {
+      allow read: if isStaff()
+        || (isSignedIn() && resource.data.actorId == request.auth.uid);
+
+      allow create: if isSignedIn()
+        && request.resource.data.actorId == request.auth.uid
+        && request.resource.data.ticketId is string
+        && request.resource.data.action is string
+        && request.resource.data.createdAt is string;
+
+      allow update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

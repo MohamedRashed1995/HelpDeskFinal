@@ -1,0 +1,136 @@
+@import "tailwindcss";
+
+:root,
+[data-theme="dark"] {
+  --bg: #131410;
+  --surface-lowest: #0e0e0b;
+  --surface-low: #1c1c18;
+  --surface: #20201c;
+  --surface-high: #2a2a26;
+  --surface-highest: #353530;
+  --text: #e5e2db;
+  --muted: #c3c8c2;
+  --outline: #8d928d;
+  --border: #424844;
+  --primary: #b6ccbd;
+  --on-primary: #22342a;
+  --forest: #0d1f16;
+  --layer-green: #1b3329;
+  --gold: #e9c176;
+  --gold-muted: #c5a059;
+  --on-gold: #412d00;
+  --gold-container: #604403;
+  --error: #ffb4ab;
+  --error-container: #93000a;
+  --bone: #f4f1ea;
+  --glow: rgba(181, 204, 189, 0.12);
+}
+
+[data-theme="light"] {
+  --bg: #f4f1ea;
+  --surface-lowest: #ffffff;
+  --surface-low: #efebe3;
+  --surface: #e8e3d8;
+  --surface-high: #ddd7ca;
+  --surface-highest: #d0c9b8;
+  --text: #0d1f16;
+  --muted: #384b40;
+  --outline: #5d655f;
+  --border: #c3c8c2;
+  --primary: #22342a;
+  --on-primary: #d2e8d9;
+  --forest: #0d1f16;
+  --layer-green: #d2e8d9;
+  --gold: #5d4201;
+  --gold-muted: #c5a059;
+  --on-gold: #261900;
+  --gold-container: #ffdea5;
+  --error: #93000a;
+  --error-container: #ffdad6;
+  --bone: #131410;
+  --glow: rgba(13, 31, 22, 0.06);
+}
+
+@theme inline {
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Libre Caslon Text", ui-serif, Georgia, serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+.display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.hairline {
+  border: 1px solid var(--border);
+}
+
+.gold-btn {
+  background: linear-gradient(180deg, #f0d08a 0%, #e9c176 55%, #c5a059 100%);
+  color: var(--on-gold);
+}
+
+.gold-btn:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.field {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.65rem 0;
+  font-size: 0.95rem;
+}
+
+.field:focus {
+  outline: none;
+  border-bottom-color: var(--gold);
+}
+
+.field::placeholder {
+  color: color-mix(in srgb, var(--muted) 70%, transparent);
+}
