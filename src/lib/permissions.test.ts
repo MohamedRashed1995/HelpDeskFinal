@@ -137,6 +137,7 @@ describe("status transitions", () => {
   it("enforces role permissions on transitions", () => {
     const ticket = makeTicket({ status: "In Progress", assigneeId: "u-agent" });
     expect(checkStatusChange(makeUser("manager"), ticket, "Resolved")).toBeNull();
+    expect(checkStatusChange(makeUser("reviewer"), ticket, "Resolved")).toBeNull();
     expect(checkStatusChange(makeUser("submitter", "u-submitter"), ticket, "Resolved")).toBeTruthy();
   });
 
@@ -147,9 +148,10 @@ describe("status transitions", () => {
     }
   });
 
-  it("only lets managers close resolved tickets", () => {
+  it("lets reviewers and managers close resolved tickets", () => {
     const resolved = makeTicket({ status: "Resolved", assigneeId: "u-agent" });
     expect(checkClose(makeUser("manager"), resolved)).toBeNull();
+    expect(checkClose(makeUser("reviewer"), resolved)).toBeNull();
     expect(checkClose(makeUser("submitter", "u-submitter"), resolved)).toBeTruthy();
     expect(checkClose(makeUser("submitter", "u-other"), resolved)).toBeTruthy();
     expect(checkClose(makeUser("reviewer"), resolved)).toBeTruthy();

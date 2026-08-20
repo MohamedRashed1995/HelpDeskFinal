@@ -25,6 +25,7 @@ import {
 import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import { getFirebase, isFirebaseConfigured } from "./firebase";
 import { DEFAULT_ROLE, ROLE_TITLES, isRole } from "./permissions";
+import { roleForEmail } from "./roleConfig";
 import { USERS, userById } from "./seed";
 import type { User, UserProfileDoc } from "./types";
 
@@ -66,10 +67,16 @@ function profileToUser(profile: UserProfileDoc): User {
 
 function readProfileDoc(uid: string, data: Record<string, unknown> | undefined): UserProfileDoc | null {
   if (!data) return null;
-  const role = isRole(data.role) ? data.role : DEFAULT_ROLE;
+  const email = typeof data.email === "string" ? data.email : "";
+  const configuredRole = roleForEmail(email);
+  const role = configuredRole !== DEFAULT_ROLE && configuredRole !== data.role
+    ? configuredRole
+    : isRole(data.role)
+      ? data.role
+      : configuredRole;
   return {
     uid,
-    email: typeof data.email === "string" ? data.email : "",
+    email,
     displayName: typeof data.displayName === "string" ? data.displayName : "",
     role,
     emailVerified: data.emailVerified === true,
@@ -81,7 +88,7 @@ function readProfileDoc(uid: string, data: Record<string, unknown> | undefined):
 
 /**
  * Creates `users/{uid}` on first sign-in and keeps `emailVerified` in sync.
- * The role is never taken from client input — new accounts always start as submitter.
+ * The role is never taken from client input — new accounts use the configured email mapping.
  */
 async function ensureProfile(firebaseUser: FirebaseUser) {
   const { db } = getFirebase();
@@ -94,7 +101,7 @@ async function ensureProfile(firebaseUser: FirebaseUser) {
       uid: firebaseUser.uid,
       email: firebaseUser.email ?? "",
       displayName: firebaseUser.displayName ?? firebaseUser.email ?? "",
-      role: DEFAULT_ROLE,
+      role: roleForEmail(firebaseUser.email),
       emailVerified: firebaseUser.emailVerified,
       avatarUrl: firebaseUser.photoURL,
       createdAt: now,
@@ -106,6 +113,11 @@ async function ensureProfile(firebaseUser: FirebaseUser) {
 
   if (snapshot.data().emailVerified !== firebaseUser.emailVerified) {
     await setDoc(ref, { emailVerified: firebaseUser.emailVerified, updatedAt: now }, { merge: true });
+  }
+
+  const configuredRole = roleForEmail(firebaseUser.email);
+  if (configuredRole !== DEFAULT_ROLE && snapshot.data().role !== configuredRole) {
+    await setDoc(ref, { role: configuredRole, updatedAt: now }, { merge: true });
   }
 }
 

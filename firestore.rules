@@ -39,7 +39,7 @@ service cloud.firestore {
 
       allow read: if isOwner(uid) || isStaff();
 
-      // A profile is always created for the caller's own uid and always starts as submitter.
+      // A profile is created for the caller's own uid; privileged emails receive their configured role.
       allow create: if isOwner(uid)
         && request.resource.data.uid == uid
         && request.resource.data.role == (
@@ -100,7 +100,7 @@ service cloud.firestore {
       }
 
       function statusAllowedForRole() {
-        return role() == 'manager'
+        return role() in ['reviewer', 'manager']
           && incoming().status in ['In Triage', 'In Progress', 'Resolved', 'Closed'];
       }
 
@@ -130,7 +130,7 @@ service cloud.firestore {
         && isStaff()
         && existing().status != 'Closed'
         && immutableFieldsKept()
-        && (role() == 'manager' || reviewerUpdateAllowed())
+        && (role() == 'manager' || (role() == 'reviewer' && (statusChanged() || reviewerUpdateAllowed())))
         && (!statusChanged() || (lifecycleOrdered() && assigneeRequirementMet() && statusAllowedForRole()))
         && (!assigneeChanged() || assignmentAllowedForRole());
 

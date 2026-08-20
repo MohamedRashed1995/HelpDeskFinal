@@ -169,7 +169,7 @@ export function TicketDetailsPage() {
                 Assign a reviewer before moving this ticket to In Progress.
               </p>
             ) : null}
-            {ticket.status === "Resolved" && user.role === "manager" ? (
+            {ticket.status === "Resolved" && (user.role === "reviewer" || user.role === "manager") ? (
               <button
                 type="button"
                 className="mt-3 w-full rounded-[8px] py-2 text-sm font-semibold"

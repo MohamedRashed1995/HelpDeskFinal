@@ -22,7 +22,7 @@ export function isStaff(role: Role) {
 }
 
 export function canChangeStatus(role: Role) {
-  return role === "manager";
+  return role === "reviewer" || role === "manager";
 }
 
 /** Roles allowed to reach each protected route. `null` means "any signed-in user". */
@@ -49,7 +49,7 @@ export function canViewTicket(user: User, ticket: Ticket) {
 /** Status changes each role may drive the ticket into. */
 export const ALLOWED_TRANSITIONS: Record<Role, TicketStatus[]> = {
   submitter: [],
-  reviewer: [],
+  reviewer: ["In Triage", "In Progress", "Resolved", "Closed"],
   manager: ["In Triage", "In Progress", "Resolved", "Closed"],
 };
 
@@ -73,7 +73,7 @@ export function checkStatusChange(user: User, ticket: Ticket, next: TicketStatus
     return "A ticket cannot move to In Progress without an assignee.";
   }
   if (!canChangeStatus(user.role)) {
-    return "Only managers can change ticket status.";
+    return "Only reviewers and managers can change ticket status.";
   }
   if (!ALLOWED_TRANSITIONS[user.role].includes(next)) {
     return "Your role cannot perform this status change.";
@@ -86,8 +86,8 @@ export function checkClose(user: User, ticket: Ticket): string | null {
   if (user.role === "submitter" && ticket.submitterId !== user.id) {
     return "You can only close your own tickets.";
   }
-  if (user.role !== "manager") {
-    return "Your role cannot close tickets.";
+  if (user.role !== "reviewer" && user.role !== "manager") {
+    return "Only reviewers and managers can close tickets.";
   }
   return null;
 }
