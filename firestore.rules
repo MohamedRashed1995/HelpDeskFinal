@@ -98,9 +98,7 @@ service cloud.firestore {
 
       function statusAllowedForRole() {
         return (role() == 'manager' && incoming().status in ['In Triage', 'In Progress', 'Resolved', 'Closed'])
-          || (role() == 'triage' && incoming().status in ['In Triage', 'In Progress'])
-          || (role() == 'agent' && incoming().status in ['In Progress', 'Resolved'])
-          || (role() == 'submitter' && incoming().status == 'Closed' && isSubmitterOfTicket());
+          || (role() == 'agent' && incoming().status in ['In Progress', 'Resolved']);
       }
 
       function assignmentAllowedForRole() {
@@ -120,7 +118,7 @@ service cloud.firestore {
         && incoming().description is string;
 
       allow update: if isSignedIn()
-        && (isStaff() || isSubmitterOfTicket())
+        && isStaff()
         && existing().status != 'Closed'
         && immutableFieldsKept()
         && (!statusChanged() || (lifecycleOrdered() && assigneeRequirementMet() && statusAllowedForRole()))

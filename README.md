@@ -64,6 +64,7 @@ When the required variables are missing the app starts in **demo mode**: the per
 - Session persistence is `browserLocalPersistence`; a single `onAuthStateChanged` listener in `src/lib/auth.tsx` owns auth state for the whole app.
 - Protected routes require authentication; email verification is tracked but does not block access.
 - Every new account is created as **submitter**. Roles are never chosen during registration; only a manager can change a role (enforced in Firestore rules).
+- To promote `manager@helpdesk.com`, open Firebase Console -> Authentication -> Users, copy that account's UID, then open Firestore -> `users` -> the matching UID document and set `role` to `manager`. Do not edit roles from the client UI.
 
 ## Data model
 
@@ -84,6 +85,8 @@ Audit entries are written in the same batch as the ticket change for ticket crea
 | `/analytics` | manager |
 
 Unauthorized navigation renders a real 403 page instead of a silent redirect, and Firestore rules enforce the same boundaries server-side.
+
+Only `manager` and `agent` roles can change ticket status. Submitters can create and view their own tickets; the existing `triage` role can retain queue and assignment access without changing status.
 
 ## Ticket rules
 

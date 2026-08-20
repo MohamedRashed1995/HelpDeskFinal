@@ -128,7 +128,7 @@ describe("assignment", () => {
 describe("status transitions", () => {
   it("follows the lifecycle order", () => {
     const ticket = makeTicket({ status: "Open" });
-    expect(checkStatusChange(makeUser("triage"), ticket, "In Triage")).toBeNull();
+    expect(checkStatusChange(makeUser("triage"), ticket, "In Triage")).toBeTruthy();
     expect(checkStatusChange(makeUser("manager"), ticket, "Resolved")).toBeTruthy();
   });
 
@@ -153,10 +153,10 @@ describe("status transitions", () => {
     }
   });
 
-  it("only closes resolved tickets, and only for the owner or a manager", () => {
+  it("only lets managers close resolved tickets", () => {
     const resolved = makeTicket({ status: "Resolved", assigneeId: "u-agent" });
-    expect(checkClose(makeUser("submitter", "u-submitter"), resolved)).toBeNull();
     expect(checkClose(makeUser("manager"), resolved)).toBeNull();
+    expect(checkClose(makeUser("submitter", "u-submitter"), resolved)).toBeTruthy();
     expect(checkClose(makeUser("submitter", "u-other"), resolved)).toBeTruthy();
     expect(checkClose(makeUser("agent"), resolved)).toBeTruthy();
     expect(checkClose(makeUser("manager"), makeTicket({ status: "Open" }))).toBeTruthy();

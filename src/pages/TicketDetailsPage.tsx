@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { StatusBadge } from "../components/StatusBadge";
-import { canAssign } from "../lib/permissions";
+import { canAssign, canChangeStatus } from "../lib/permissions";
 import { useApp } from "../lib/store";
 import { LIFECYCLE, NEXT_STATUS } from "../lib/types";
 
@@ -160,7 +160,7 @@ export function TicketDetailsPage() {
           ) : null}
         </div>
 
-        {!readonly ? (
+        {!readonly && canChangeStatus(user.role) ? (
           <div className="rounded-[12px] p-5" style={{ background: "var(--surface)" }}>
             <h2 className="text-xl">Actions</h2>
             {next ? (
@@ -179,7 +179,7 @@ export function TicketDetailsPage() {
                 Assign an agent before moving this ticket to In Progress.
               </p>
             ) : null}
-            {ticket.status === "Resolved" && (user.role === "submitter" || user.role === "manager") ? (
+            {ticket.status === "Resolved" && user.role === "manager" ? (
               <button
                 type="button"
                 className="mt-3 w-full rounded-[8px] py-2 text-sm font-semibold"
@@ -195,11 +195,11 @@ export function TicketDetailsPage() {
               </p>
             ) : null}
           </div>
-        ) : (
+        ) : readonly ? (
           <div className="rounded-[12px] p-5 text-sm" style={{ background: "var(--surface)", color: "var(--muted)" }}>
             This ticket is closed and cannot be edited.
           </div>
-        )}
+        ) : null}
 
         {!readonly && user.role !== "submitter" ? (
           <form className="rounded-[12px] p-5" style={{ background: "var(--surface)" }} onSubmit={onNote}>

@@ -22,6 +22,10 @@ export function isStaff(role: Role) {
   return STAFF_ROLES.includes(role);
 }
 
+export function canChangeStatus(role: Role) {
+  return role === "agent" || role === "manager";
+}
+
 /** Roles allowed to reach each protected route. `null` means "any signed-in user". */
 export const ROUTE_ROLES: Record<string, Role[] | null> = {
   "/": null,
@@ -45,7 +49,7 @@ export function canViewTicket(user: User, ticket: Ticket) {
 
 /** Status changes each role may drive the ticket into. */
 export const ALLOWED_TRANSITIONS: Record<Role, TicketStatus[]> = {
-  submitter: ["Closed"],
+  submitter: [],
   agent: ["In Progress", "Resolved"],
   triage: ["In Triage", "In Progress"],
   manager: ["In Triage", "In Progress", "Resolved", "Closed"],
@@ -72,11 +76,11 @@ export function checkStatusChange(user: User, ticket: Ticket, next: TicketStatus
   if (next === "In Progress" && !ticket.assigneeId) {
     return "A ticket cannot move to In Progress without an assignee.";
   }
+  if (!canChangeStatus(user.role)) {
+    return "Only agents and managers can change ticket status.";
+  }
   if (!ALLOWED_TRANSITIONS[user.role].includes(next)) {
     return "Your role cannot perform this status change.";
-  }
-  if (user.role === "submitter" && ticket.submitterId !== user.id) {
-    return "You can only update your own tickets.";
   }
   return null;
 }
@@ -86,7 +90,7 @@ export function checkClose(user: User, ticket: Ticket): string | null {
   if (user.role === "submitter" && ticket.submitterId !== user.id) {
     return "You can only close your own tickets.";
   }
-  if (user.role !== "submitter" && user.role !== "manager") {
+  if (user.role !== "manager") {
     return "Your role cannot close tickets.";
   }
   return null;
